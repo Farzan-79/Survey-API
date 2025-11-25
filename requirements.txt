@@ -1,0 +1,8 @@
+django
+djangorestframework
+djangorestframework-simplejwt
+pyyaml
+django_cors_headers
+requests
+ipython
+django-nested-admin
