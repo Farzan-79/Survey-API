@@ -1,9 +1,11 @@
 from django.urls import path
 from .views import (
-    SurveyListView
+    SurveyListCreateView,
+    SurveyDetailView
 )
 
 app_name= 'survey'
 urlpatterns = [
-    path("", SurveyListView.as_view())
+    path("", SurveyListCreateView.as_view(), name='list-create'),
+    path("<slug:slug>/", SurveyDetailView.as_view(), name='detail')
 ]
