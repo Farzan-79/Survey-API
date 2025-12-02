@@ -29,13 +29,3 @@ class SurveyDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = SurveyDetailSerializer
     permission_classes = [IsOwnerOrReadOnlyPermission]
 
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-
-        # Add the survey instance globally
-        if self.kwargs.get('slug'):
-            survey = self.get_object()
-            context['survey'] = survey
-        return context
-
-
