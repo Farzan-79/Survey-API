@@ -38,8 +38,12 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
+    #* Third-Party Packages
     'rest_framework',
+    'rest_framework_simplejwt',
+    ''
 
+    #* Internal Apps
     'survey',
 ]
 

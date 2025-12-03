@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.db import transaction
 from drf_writable_nested import WritableNestedModelSerializer
 
+from .validators import Survey_unq_validator
 from .models import Survey, Question, Choice, Answer
 
 # from rest_framework.serializers import ValidationError
@@ -16,6 +17,7 @@ class ChoiceSerializer(serializers.ModelSerializer):
             'id',
             'title',
         ]
+
 class ChoiceCreateSerializer(WritableNestedModelSerializer):
     class Meta:
         model = Choice
@@ -36,6 +38,7 @@ class QuestionSerializer(serializers.ModelSerializer):
             'question_type',
             'choices'
         ]
+
 class QuestionCreateSerializer(WritableNestedModelSerializer):
     choices = ChoiceCreateSerializer(many=True, required=False)
 
@@ -69,9 +72,11 @@ class SurveyListSerializer(serializers.ModelSerializer):
 
     def get_question_count(self, obj):
         return obj.questions.count()
-class SurveyCreateSerializer(WritableNestedModelSerializer):
-    questions = QuestionCreateSerializer(many=True, required=False)
 
+class SurveyCreateSerializer(WritableNestedModelSerializer):
+    questions = QuestionCreateSerializer(many=True, required=True)
+    title = serializers.CharField(validators=[Survey_unq_validator])
+    
     class Meta:
         model = Survey
         fields = [
@@ -94,12 +99,41 @@ class SurveyCreateSerializer(WritableNestedModelSerializer):
         remove_ids(data)
         return super().to_internal_value(data)
     
+    def validate(self, attrs):
+        incoming_questions = attrs.get('questions')
+        
+        #* Validate Name Uniqueness
+        q_titles = []
+        for q in incoming_questions:
+            qq = q.get('title')
+            if qq in q_titles:
+                raise serializers.ValidationError({"questions": f"Duplicate question title in this survey: '{qq}'"})
+            q_titles.append(qq)
+
+            if q.get('question_type') == 'multiple_choice':
+                incoming_choices = q.get('choices', [])
+                if len(incoming_choices) < 2:
+                    raise serializers.ValidationError(f"A Multiple-Choice Question can't have less than 2 choices: '{qq}'")
+                c_titles = []
+                for c in incoming_choices:
+                    cc = c.get('title')
+                    if cc in c_titles:
+                        raise serializers.ValidationError({"choices": f"Duplicate choice in question '{qq}': '{cc}'"})
+                    c_titles.append(cc)
+
+            elif q.get('question_type') == 'free_text':
+                if q.get('choices'):
+                    raise serializers.ValidationError(f"A Free-Text Question Can't accept Choices: '{qq}'")
+        return attrs
+
 class SurveyDetailSerializer(serializers.ModelSerializer):
     #? Handles Update, Retrieve, and Delete
 
     questions = QuestionSerializer(many=True)
     user = serializers.CharField(read_only=True)
     id = serializers.IntegerField(read_only=True)
+    title = serializers.CharField(validators=[Survey_unq_validator])
+
 
     class Meta:
         model = Survey
@@ -128,6 +162,31 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
             #* no questions to update, 
             return attrs
         
+        #* Validate Name Uniqueness
+        q_titles = []
+        for q in incoming_questions:
+            qq = q.get('title')
+            if qq in q_titles:
+                raise serializers.ValidationError({"questions": f"Duplicate question title in this survey: '{qq}'"})
+            q_titles.append(qq)
+
+            if q.get('question_type') == 'multiple_choice':
+                incoming_choices = q.get('choices', [])
+                if len(incoming_choices) < 2:
+                    raise serializers.ValidationError(f"A Multiple-Choice Question can't have less than 2 choices: '{qq}'")
+                c_titles = []
+                for c in incoming_choices:
+                    cc = c.get('title')
+                    if cc in c_titles:
+                        raise serializers.ValidationError({"choices": f"Duplicate choice in question '{qq}': '{cc}'"})
+                    c_titles.append(cc)
+
+            elif q.get('question_type') == 'free_text':
+                if q.get('choices'):
+                    raise serializers.ValidationError(f"A Free-Text Question Can't accept Choices: '{qq}'")
+
+        
+        #* VALIDATING OWNERSHIP
         incoming_q_ids = set() #* a set of all the incoming question with IDs
         incoming_declared_choice_to_question = {} #* a dict of choice IDs as keys, and their declared questions IDs and their value
         #? collecting the above vars:

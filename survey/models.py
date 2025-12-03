@@ -13,6 +13,14 @@ class Survey(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['title'],
+                name= 'uniq_survey_title'
+            )
+        ]
+
     def save(self, *args, **kwargs):
         if not self.slug:
             slugify_instance_name(self)
@@ -28,6 +36,14 @@ class Question(models.Model):
 
     def __str__(self):
         return self.title
+    
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['survey' ,'title'],
+                name= 'uniq_question_per_survey'
+            )
+        ]
 
 class Choice(models.Model):
     question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='choices')
@@ -35,6 +51,14 @@ class Choice(models.Model):
 
     def __str__(self):
         return self.title
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['question' ,'title'],
+                name= 'uniq_choice_per_question'
+            )
+        ]
     
 
 class Answer(models.Model):
