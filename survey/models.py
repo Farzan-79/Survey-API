@@ -42,7 +42,7 @@ class Question(models.Model):
             models.UniqueConstraint(
                 fields=['survey' ,'title'],
                 name= 'uniq_question_per_survey'
-            )
+            ),
         ]
 
 class Choice(models.Model):

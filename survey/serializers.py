@@ -38,6 +38,12 @@ class QuestionSerializer(serializers.ModelSerializer):
             'question_type',
             'choices'
         ]
+    
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.question_type == 'free_text':
+            data.pop('choices', None)
+        return data
 
 class QuestionCreateSerializer(WritableNestedModelSerializer):
     choices = ChoiceCreateSerializer(many=True, required=False)
