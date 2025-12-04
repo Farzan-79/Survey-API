@@ -14,6 +14,7 @@ class Survey(models.Model):
     updated = models.DateTimeField(auto_now=True)
 
     class Meta:
+        ordering = ['created']
         constraints = [
             models.UniqueConstraint(
                 fields=['title'],
@@ -38,6 +39,7 @@ class Question(models.Model):
         return self.title
     
     class Meta:
+        ordering = ['id']
         constraints = [
             models.UniqueConstraint(
                 fields=['survey' ,'title'],
@@ -53,6 +55,7 @@ class Choice(models.Model):
         return self.title
 
     class Meta:
+        ordering = ['id']
         constraints = [
             models.UniqueConstraint(
                 fields=['question' ,'title'],
