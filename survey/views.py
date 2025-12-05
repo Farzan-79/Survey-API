@@ -11,6 +11,7 @@ class SurveyListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     
     def get_serializer_class(self):
+        print(self.request.user)
         if self.request.method == "POST":
             return SurveyCreateSerializer
         else:

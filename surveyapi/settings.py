@@ -38,6 +38,9 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
+    #* Third-Party API services
+    'drf_spectacular',
+
     #* Third-Party Packages
     'rest_framework',
     'rest_framework_simplejwt',
@@ -139,10 +142,17 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly'
     ],
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ["Bearer"],
     "ACCESS_TOKEN_LIFETIME": datetime.timedelta(seconds=59),
     "REFRESH_TOKEN_LIFETIME": datetime.timedelta(minutes=2)
+}
+
+SPECTACULAR_SETTINGS= {
+    'TITLE': 'SURVEY API',
+    'DESCRIPTION': 'API Version of my SurFway app',
+    'VERSION': '1.0.0'
 }
