@@ -9,9 +9,9 @@ from .serializers import SurveyCreateSerializer, SurveyListSerializer, SurveyDet
 class SurveyListCreateView(generics.ListCreateAPIView):
     queryset = Survey.objects.all()
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    http_method_names = ["get", "post", "options"]
     
     def get_serializer_class(self):
-        print(self.request.user)
         if self.request.method == "POST":
             return SurveyCreateSerializer
         else:
@@ -29,4 +29,5 @@ class SurveyDetailView(generics.RetrieveUpdateDestroyAPIView):
     lookup_field = 'slug'
     serializer_class = SurveyDetailSerializer
     permission_classes = [IsOwnerOrReadOnlyPermission]
+    http_method_names = ["get", "put", "options", "delete"]
 

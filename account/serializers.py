@@ -5,7 +5,7 @@ from django.contrib.auth.password_validation import validate_password
 
 User = get_user_model()
 
-class UserRegisterSerializer(serializers.Serializer):
+class UserRegisterSerializer(serializers.ModelSerializer):
     Username = serializers.CharField(source='username')
     Email = serializers.EmailField(source='email', required=False)
     Password = serializers.CharField(source='password', write_only= True)
@@ -19,7 +19,6 @@ class UserRegisterSerializer(serializers.Serializer):
         ]
 
     def validate_Username(self, value):
-        print(value)
         if len(value) < 3:
             raise serializers.ValidationError("Usernames should have at least 3 characters")
         if User.objects.filter(username=value).exists():
@@ -38,7 +37,4 @@ class UserRegisterSerializer(serializers.Serializer):
 
 
     def create(self, validated_data):
-        return User.objects.create_user(
-            username = validated_data['username'],
-            password = validated_data['password']
-        )
+        return User.objects.create_user(**validated_data)

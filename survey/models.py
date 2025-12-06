@@ -8,7 +8,7 @@ from .utils import slugify_instance_name
 class Survey(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='surveys', null=True)
     title = models.CharField(max_length=255)
-    description = models.CharField(null=True, blank=True)
+    description = models.TextField(null=True, blank=True)
     slug = models.SlugField(unique=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)

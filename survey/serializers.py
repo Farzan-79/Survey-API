@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.db import transaction
 from drf_writable_nested import WritableNestedModelSerializer
+import copy
 
 from .validators import Survey_unq_validator
 from .models import Survey, Question, Choice, Answer
@@ -74,7 +75,7 @@ class SurveyListSerializer(serializers.ModelSerializer):
             'url'
         ]
     def get_user(self, obj):
-        return obj.user.username
+        return obj.user.username if obj.user else None
 
     def get_question_count(self, obj):
         return obj.questions.count()
@@ -101,7 +102,8 @@ class SurveyCreateSerializer(WritableNestedModelSerializer):
             elif isinstance(value, list): #* if its a list, look the the dicts inside and delete their IDs if provided!
                 for item in value:
                     remove_ids(item)
-        
+
+        data = copy.deepcopy(data)
         remove_ids(data)
         return super().to_internal_value(data)
     
@@ -168,7 +170,7 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
             #* no questions to update, 
             return attrs
         
-        #* Validate Name Uniqueness
+        #? Validate Name Uniqueness and counts
         q_titles = []
         for q in incoming_questions:
             qq = q.get('title')
@@ -192,10 +194,10 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError(f"A Free-Text Question Can't accept Choices: '{qq}'")
 
         
-        #* VALIDATING OWNERSHIP
+        #? VALIDATING OWNERSHIP
         incoming_q_ids = set() #* a set of all the incoming question with IDs
         incoming_declared_choice_to_question = {} #* a dict of choice IDs as keys, and their declared questions IDs and their value
-        #? collecting the above vars:
+        #* collecting the above vars:
         for q in incoming_questions: 
             qid = q.get('id')
             if qid:
@@ -262,8 +264,7 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
         instance.save()
 
         if not question_data:
-            #* No nested changes: we're done
-            return instance
+            raise serializers.ValidationError({"Survey": "A Survey must have at least one Question"})
         
 
         existing_questions = list(instance.questions.all().only('id')) #* list of all existing question objects in this survey
@@ -321,12 +322,11 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
             if choices_to_delete:
                 Choice.objects.filter(id__in=choices_to_delete).delete()
 
-        questions_to_delete = set(existing_choices_dict.keys()) - question_to_keep
+        questions_to_delete = set(existing_questions_dict.keys()) - question_to_keep
         if questions_to_delete:
             Question.objects.filter(id__in=questions_to_delete).delete()
 
         return instance
-
 
 
 
