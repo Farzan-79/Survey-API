@@ -35,6 +35,7 @@ class Question(models.Model):
     title = models.CharField(max_length=255)
     question_type = models.CharField(max_length=15,
                                      choices=[('multiple_choice', 'Multiple Choice'), ('free_text', 'Free Text')])
+    required = models.BooleanField(default=True)
 
     def __str__(self):
         return self.title

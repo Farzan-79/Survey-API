@@ -408,10 +408,23 @@ class SubmissionSerializer(serializers.ModelSerializer):
         return fields
 
     def validate(self, attrs):
-        answers = self.initial_data.get('answers', [])
-        if not answers:
-            raise serializers.ValidationError({"answers": "At least one answer is required."})
+        survey = self.context.get('survey')
+        answers = attrs['answers']
+
+        required_questions = set(survey.questions.filter(required=True).values_list('id', flat=True))
+        answered_questions = {a.get('question').id for a in answers}
+
+        missing_questions = required_questions - answered_questions
+        if len(missing_questions) > 0:
+             raise ValidationError({"required_questions": list(missing_questions)})
+
+        if len(answered_questions) != len(answers): #* missing questions is a set, and duplicates are deleted
+            raise ValidationError("Duplicate answers for the same question are not allowed.")       
         return attrs
+    
+
+    
+
 
     @transaction.atomic
     def create(self, validated_data):
