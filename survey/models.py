@@ -33,7 +33,8 @@ class Survey(models.Model):
 class Question(models.Model):
     survey = models.ForeignKey(Survey, on_delete=models.CASCADE, related_name='questions')
     title = models.CharField(max_length=255)
-    question_type = models.CharField(max_length=15, choices=[('multiple_choice', 'Multiple Choice'), ('free_text', 'Free Text')])
+    question_type = models.CharField(max_length=15,
+                                     choices=[('multiple_choice', 'Multiple Choice'), ('free_text', 'Free Text')])
 
     def __str__(self):
         return self.title
@@ -62,16 +63,39 @@ class Choice(models.Model):
                 name= 'uniq_choice_per_question'
             )
         ]
+
+class Submission(models.Model):
+    survey = models.ForeignKey(Survey,
+                               on_delete=models.CASCADE,
+                               related_name='submissions')
     
+    user = models.ForeignKey(settings.AUTH_USER_MODEL,
+                             on_delete=models.SET_NULL,
+                             related_name='submissions',
+                             null=True, blank=True)
+    
+    created = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Response #{self.id} to '{self.survey.title}'"
+
 
 class Answer(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name='answers', null=True)
-    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='answers')
+    submission = models.ForeignKey(Submission,
+                                 on_delete=models.CASCADE,
+                                 related_name='answers')
+    
+    question = models.ForeignKey(Question,
+                                 on_delete=models.CASCADE,
+                                 related_name='answers')
 
-    # if it was multi choice:
-    chosen_choice = models.ForeignKey(Choice, on_delete=models.CASCADE, null=True, blank=True, related_name='answers')
+    #* if it was multi choice:
+    chosen_choice = models.ForeignKey(Choice,
+                                      on_delete=models.CASCADE,
+                                      null=True, blank=True,
+                                      related_name='answers')
 
-    # if it was text:
+    #* if it was text:
     text_answer = models.TextField(null=True, blank=True)
 
     class Meta:
@@ -80,8 +104,8 @@ class Answer(models.Model):
         #* with the same (user, question). It's important to enforce this at DB level
         #* in addition to application-level checks to avoid data races and duplicates.
         constraints = [
-            models.UniqueConstraint(fields=['user', 'question'], name='unique_answer')
+            models.UniqueConstraint(fields=['submission', 'question'], name='unique_answer')
         ]
 
     def __str__(self):
-        return f'Answer for \"{self.question.title}\" by \"{self.user}\" : {[self.chosen_choice.title if self.chosen_choice else self.text_answer]}'
+        return f'Answer for \"{self.question.title}\" : {[self.chosen_choice.title if self.chosen_choice else self.text_answer]}'

@@ -5,7 +5,7 @@ import copy
 from rest_framework.serializers import ValidationError
 
 from .validators import Survey_unq_validator
-from .models import Survey, Question, Choice, Answer
+from .models import Survey, Question, Choice, Answer, Submission
 
 # from rest_framework.serializers import ValidationError
 
@@ -351,15 +351,13 @@ class AnswerSerializer(serializers.ModelSerializer):
         if survey:
             self.fields['question'].queryset = survey.questions.all()
             self.fields['chosen_choice'].queryset = Choice.objects.filter(question__survey= survey)
-
+    
     def validate(self, attrs):
-        user = self.context.get('user', None)
         survey = self.context.get('survey', None)
         question = attrs.get('question')
         chosen_choice = attrs.get('chosen_choice')
         text_answer = attrs.get('text_answer')
-        print(attrs)
-        print(question)
+
 
         if not question:
             raise ValidationError({'question': 'Question is required.'})
@@ -384,18 +382,60 @@ class AnswerSerializer(serializers.ModelSerializer):
         else:
             raise ValidationError({'question': f'Unsupported question_type: {question.question_type}'})
         
-        if user and user.is_authenticated:
-            if Answer.objects.filter(user=user, question=question).exists():
-                raise serializers.ValidationError(
-                    'You have already answered this question.'
-                )
-            
-        if user and user.is_authenticated:
-            attrs['user'] = user
-        else:
-            attrs['user'] = None
+        
+
 
         return attrs
+    
+class SubmissionSerializer(serializers.ModelSerializer):
+    answers = AnswerSerializer(many=True)
+
+    class Meta:
+        model = Submission
+        fields = [
+            'answers',
+            'user'
+        ]
+        read_only_fields = ['id', 'created']
+
+    def get_fields(self):
+        fields = super().get_fields()
+        fields['answers'] = AnswerSerializer(many=True,
+                                             context={
+                                                 'survey': self.context.get('survey'),
+                                                 'request': self.context.get('request')
+                                             })
+        return fields
+
+    def validate(self, attrs):
+        answers = self.initial_data.get('answers', [])
+        if not answers:
+            raise serializers.ValidationError({"answers": "At least one answer is required."})
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data):
+        answers= validated_data.pop('answers')
+        survey = self.context.get('survey')
+        request = self.context.get('request')
+
+        user = request.user if(request and request.user.is_authenticated) else None
+
+        if user and user.is_authenticated:
+            if Submission.objects.filter(user=user, survey=survey).exists():
+                raise serializers.ValidationError(
+                    f'{user.username}, You have already answered this question.'
+                )
+            
+        submission = Submission.objects.create(survey=survey, user=user)
+
+        for answer in answers:
+            Answer.objects.create(submission=submission, **answer)
+
+        return submission
+
+
+        
 
 
 
