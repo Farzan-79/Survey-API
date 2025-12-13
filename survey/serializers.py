@@ -1,13 +1,11 @@
 from rest_framework import serializers
 from django.db import transaction
 from drf_writable_nested import WritableNestedModelSerializer
-import copy
 from rest_framework.serializers import ValidationError
 
 from .validators import Survey_unq_validator
 from .models import Survey, Question, Choice, Answer, Submission
 
-# from rest_framework.serializers import ValidationError
 
 #! --------------- CHOICE SERIALIZERS -------------------
 class ChoiceSerializer(serializers.ModelSerializer):
@@ -21,6 +19,7 @@ class ChoiceSerializer(serializers.ModelSerializer):
         ]
 
 class ChoiceCreateSerializer(WritableNestedModelSerializer):
+    
     class Meta:
         model = Choice
         fields = [
@@ -31,6 +30,7 @@ class ChoiceCreateSerializer(WritableNestedModelSerializer):
 class QuestionSerializer(serializers.ModelSerializer):
     choices = ChoiceSerializer(many=True, required=False)
     id = serializers.IntegerField(required=False)
+    required = serializers.BooleanField(required=False, default=True)
 
     class Meta:
         model = Question
@@ -38,23 +38,28 @@ class QuestionSerializer(serializers.ModelSerializer):
             'id',
             'title',
             'question_type',
-            'choices'
+            'required',
+            'choices',
         ]
     
     def to_representation(self, instance):
         data = super().to_representation(instance)
         if instance.question_type == 'free_text':
             data.pop('choices', None)
+        elif instance.question_type == 'free_text':
+            data.pop('multiple_choice', None)
         return data
 
 class QuestionCreateSerializer(WritableNestedModelSerializer):
     choices = ChoiceCreateSerializer(many=True, required=False)
+    required = serializers.BooleanField(required=False, default=True)
 
     class Meta:
         model = Question
         fields = [
             'title',
             'question_type',
+            'required',
             'choices'
         ]
     
@@ -63,23 +68,34 @@ class SurveyListSerializer(serializers.ModelSerializer):
     question_count = serializers.SerializerMethodField(read_only=True)
     url = serializers.HyperlinkedIdentityField(view_name='survey:detail', lookup_field='slug')
     id = serializers.IntegerField(read_only=True)
-    user = serializers.SerializerMethodField(read_only=True)
+    total_responses = serializers.SerializerMethodField(read_only=True)
+    user = serializers.SerializerMethodField(read_only= True)
 
     class Meta:
         model = Survey
         fields = [
-            'user',
             'title',
-            'description',
+            'user',
             'id',
             'question_count',
+            'total_responses',
             'url'
         ]
+
     def get_user(self, obj):
         return obj.user.username if obj.user else None
 
+    def get_total_responses(self, obj):
+        return obj.submissions.count()
+
     def get_question_count(self, obj):
         return obj.questions.count()
+        
+    def get_fields(self):
+        fields = super().get_fields()
+        if not self.context.get('request').user.is_superuser:
+            fields.pop('user')
+        return fields
 
 class SurveyCreateSerializer(WritableNestedModelSerializer):
     questions = QuestionCreateSerializer(many=True, required=True)
@@ -137,13 +153,13 @@ class SurveyCreateSerializer(WritableNestedModelSerializer):
 
 class SurveyDetailSerializer(serializers.ModelSerializer):
     #? Handles Update, Retrieve, and Delete
-
     questions = QuestionSerializer(many=True)
     user = serializers.CharField(read_only=True)
     id = serializers.IntegerField(read_only=True)
     title = serializers.CharField(validators=[Survey_unq_validator])
-    response_url = serializers.HyperlinkedIdentityField(view_name= 'survey:response', lookup_field= 'slug')
-
+    response_url = serializers.HyperlinkedIdentityField(view_name= 'survey:response', lookup_field='slug')
+    resaults_url = serializers.HyperlinkedIdentityField(view_name= 'survey:resaults', lookup_field='slug')
+    total_responses = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Survey
@@ -153,8 +169,13 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
             'title',
             'description',
             'questions',
+            'total_responses',
             'response_url',
+            'resaults_url'
         ]
+
+    def get_total_responses(self, obj):
+        return obj.submissions.count()
 
     def validate(self, attrs):
         #? Bulk-validate ownership of incoming question and choice IDs:
@@ -416,16 +437,14 @@ class SubmissionSerializer(serializers.ModelSerializer):
 
         missing_questions = required_questions - answered_questions
         if len(missing_questions) > 0:
-             raise ValidationError({"required_questions": list(missing_questions)})
+             raise ValidationError({"required_questions": 
+                                        {'id': list(missing_questions)}
+                                    })
 
         if len(answered_questions) != len(answers): #* missing questions is a set, and duplicates are deleted
             raise ValidationError("Duplicate answers for the same question are not allowed.")       
         return attrs
     
-
-    
-
-
     @transaction.atomic
     def create(self, validated_data):
         answers= validated_data.pop('answers')
@@ -447,8 +466,90 @@ class SubmissionSerializer(serializers.ModelSerializer):
 
         return submission
 
+#! --------------- RESAULT SERIALZERS --------------------
+class ChoiceResaultSerializer(serializers.ModelSerializer):
+    times_selected = serializers.SerializerMethodField()
+    percentage = serializers.SerializerMethodField()
 
-        
+
+    class Meta:
+        model = Choice
+        fields = [
+            'title',
+            'times_selected',
+            'percentage'
+        ]
+    
+    def get_times_selected(self, obj):
+        return obj.times_selected
+    
+    def get_percentage(self, obj):
+        total = obj.question.times_answered
+        if total == 0:
+            return 0
+        return round((obj.times_selected / total) * 100, 2)
+
+class QuestionResaultSerializer(serializers.ModelSerializer):
+    choices = serializers.SerializerMethodField()
+    times_answered = serializers.SerializerMethodField(read_only=True)
+    text_answers = serializers.SerializerMethodField() 
+
+    class Meta:
+        model = Question
+        fields = [
+            'id',
+            'title',
+            'question_type',
+            'required',
+            'times_answered',
+            'choices',
+            'text_answers'
+        ]
+
+    def get_choices(self, obj):
+        return ChoiceResaultSerializer(
+            obj.prefetched_choices,
+            many=True
+        ).data
+
+    def get_times_answered(self, obj):
+        return obj.times_answered
+    
+    def get_text_answers(self, obj):
+        if obj.question_type != 'free_text':
+            return None
+        return [A.text_answer for A in obj.prefetched_text_answers]
+    
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if instance.question_type == 'multiple_choice':
+            data.pop('text_answers', None)
+        elif instance.question_type == 'free_text':
+            data.pop('choices', None)
+        return data
+    
+class SurveyResaultSerializer(serializers.ModelSerializer):
+    questions = serializers.SerializerMethodField()
+    total_responses = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model= Survey
+        fields = [
+            'id',
+            'title',
+            'description',
+            'total_responses',
+            'questions'
+        ]
+    
+    def get_questions(self, obj):
+        return QuestionResaultSerializer(
+            obj.prefetched_questions,
+            many=True
+        ).data
+
+    def get_total_responses(self, obj):
+        return obj.times_submitted       
 
 
 
