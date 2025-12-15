@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from rest_framework import generics, mixins, permissions
+from rest_framework import generics, mixins, permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from .permissions import IsOwnerOrReadOnlyPermission, IsOwnerOrSuperuser
@@ -8,12 +8,21 @@ from django.db import transaction
 from django.db.models import Prefetch, Count
 
 from .models import *
-from .serializers import SurveyCreateSerializer, SurveyListSerializer, SurveyDetailSerializer, AnswerSerializer, SubmissionSerializer, SurveyResaultSerializer
+from .serializers import (
+    SurveyCreateSerializer,
+    SurveyListSerializer,
+    SurveyDetailSerializer,
+    SurveyUpdateMessageSerializer,
+    SurveyCreatedMessageSerializer,
+    SubmissionSerializer,
+    SurveyResaultSerializer)
 # Create your views here.
+# i will send you my views and serializers final versions. first, i need you to tell me why did i use a different approach for each view. i mean what is the reason it would be better for something like resaults view to be APIView and i handle all those quesrysets and for others like the detail view
+
 
 class SurveyListCreateView(generics.ListCreateAPIView):
     queryset = Survey.objects.all()
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated]
     http_method_names = ["get", "post", "options", 'head']
     
     def get_serializer_class(self):
@@ -21,30 +30,62 @@ class SurveyListCreateView(generics.ListCreateAPIView):
             return SurveyCreateSerializer
         else:
             return SurveyListSerializer
-        
-    def perform_create(self, serializer):
-        user = self.request.user if self.request.user.is_authenticated else None
-        serializer.save(user=user)
+    
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        survey = serializer.save(user=request.user)
 
-    # def get_queryset(self):
-    #     user = self.request.user if self.request.user.is_authenticated else None
-    #     if user.is_superuser:
-    #         return Survey.objects.all()
-    #     elif user:
-    #         return Survey.objects.filter(user=user)
+        question_count = len(serializer.validated_data.get('questions'))
+        response_serializer = SurveyCreatedMessageSerializer(survey, context={'question_count': question_count, 'request': request})
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    def get_queryset(self):
+        user = self.request.user if self.request.user.is_authenticated else None
+        if user and user.is_superuser:
+            return Survey.objects.select_related('user') \
+                .annotate(question_count=Count('questions', distinct=True)) \
+                .annotate(submission_count=Count('submissions', distinct=True))
+        elif user:
+            return Survey.objects.filter(user=user).select_related('user') \
+                .annotate(question_count=Count('questions', distinct=True)) \
+                .annotate(submission_count=Count('submissions', distinct=True))
+        else:
+            Survey.objects.none()
         
 class SurveyDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Survey.objects.all()
+    queryset = Survey.objects.prefetch_related('questions__choices') \
+        .annotate(submission_count=Count('submissions', distinct=True))
     lookup_field = 'slug'
     serializer_class = SurveyDetailSerializer
     permission_classes = [IsOwnerOrSuperuser]
     http_method_names = ["get", "put", "options", "delete", 'head']
 
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        survey = serializer.save()
+
+        if getattr(instance, '_prefetched_objects_cache', None):
+            #* If 'prefetch_related' has been applied to a queryset, we need to
+            #* forcibly invalidate the prefetch cache on the instance.
+            instance._prefetched_objects_cache = {}
+
+        question_count = len(serializer.validated_data.get('questions'))
+        response_serializer = SurveyUpdateMessageSerializer(survey, context={'request': request,
+                                                                             'question_count': question_count})
+        print(response_serializer.data, survey)
+        return Response(response_serializer.data, status= status.HTTP_200_OK)
+
 class SubmissionView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, slug):
-        survey = get_object_or_404(Survey, slug=slug)
+        survey = get_object_or_404(Survey.objects \
+                                   .prefetch_related('questions__choices') \
+                                   .annotate(submission_count=Count('submissions'))
+                                   ,slug=slug)
         serializer = SurveyDetailSerializer(survey, context={'request': request})
         return Response(serializer.data)
     
@@ -66,11 +107,12 @@ class ResaultsView(APIView):
                               Prefetch('answers',text_answer_qs ,to_attr='prefetched_text_answers' )) \
             .annotate(times_answered = Count('answers')) \
             .order_by('id')
-        survey = Survey.objects \
+        survey = get_object_or_404( Survey.objects \
             .prefetch_related(Prefetch('questions', queryset=question_qs, to_attr='prefetched_questions')) \
             .annotate(times_submitted = Count('submissions')) \
-            .get(slug=slug) \
-        
+            , slug=slug \
+        )
+        self.check_object_permissions(request, survey)
         serializer = SurveyResaultSerializer(survey, context={'request': request})
         return Response(serializer.data)
 

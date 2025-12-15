@@ -44,6 +44,8 @@ INSTALLED_APPS = [
     #* Third-Party Packages
     'rest_framework',
     'rest_framework_simplejwt',
+    'debug_toolbar',
+
 
     #* Internal Apps
     'survey',
@@ -54,6 +56,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'debug_toolbar.middleware.DebugToolbarMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -156,3 +159,9 @@ SPECTACULAR_SETTINGS= {
     'DESCRIPTION': 'API Version of my SurFway app',
     'VERSION': '1.0.0'
 }
+
+INTERNAL_IPS = [
+    # ...
+    "127.0.0.1",
+    # ...
+]

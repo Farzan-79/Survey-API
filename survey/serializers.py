@@ -86,10 +86,10 @@ class SurveyListSerializer(serializers.ModelSerializer):
         return obj.user.username if obj.user else None
 
     def get_total_responses(self, obj):
-        return obj.submissions.count()
+        return obj.submission_count
 
     def get_question_count(self, obj):
-        return obj.questions.count()
+        return obj.question_count
         
     def get_fields(self):
         fields = super().get_fields()
@@ -151,6 +151,27 @@ class SurveyCreateSerializer(WritableNestedModelSerializer):
                     raise ValidationError(f"A Free-Text Question Can't accept Choices: '{qq}'")
         return attrs
 
+class SurveyCreatedMessageSerializer(serializers.ModelSerializer):
+    detail_url = serializers.HyperlinkedIdentityField(view_name= 'survey:detail', lookup_field='slug')
+    response_url = serializers.HyperlinkedIdentityField(view_name= 'survey:response', lookup_field= 'slug')
+    question_count = serializers.SerializerMethodField()
+    message = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Survey
+        fields= [
+            'message',
+            'question_count',
+            'detail_url',
+            'response_url'
+        ]
+
+    def get_message(self, obj):
+        return f'Your Survey has been saved successfuly: {obj.title}'
+
+    def get_question_count(self, obj):
+        return self.context.get('question_count')
+
 class SurveyDetailSerializer(serializers.ModelSerializer):
     #? Handles Update, Retrieve, and Delete
     questions = QuestionSerializer(many=True)
@@ -175,7 +196,7 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_total_responses(self, obj):
-        return obj.submissions.count()
+        return obj.submission_count
 
     def validate(self, attrs):
         #? Bulk-validate ownership of incoming question and choice IDs:
@@ -347,6 +368,23 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
 
         return instance
 
+class SurveyUpdateMessageSerializer(serializers.ModelSerializer):
+    detail_url = serializers.HyperlinkedIdentityField(view_name= 'survey:detail', lookup_field= 'slug')
+    response_url = serializers.HyperlinkedIdentityField(view_name= 'survey:response', lookup_field= 'slug')
+    message = serializers.SerializerMethodField()
+
+    class Meta:
+        model= Survey
+        fields= [
+            'message',
+            'detail_url',
+            'response_url',
+        ]
+    
+    def get_message(self, obj):
+        return f'Survey Updated Successfully: {obj.title}'
+
+
 #! --------------- ANSWER SERIALIZERS --------------------
 class AnswerSerializer(serializers.ModelSerializer):
     question = serializers.PrimaryKeyRelatedField(queryset= Question.objects.none())
@@ -367,11 +405,14 @@ class AnswerSerializer(serializers.ModelSerializer):
         }
 
     def __init__(self, instance=None, data=..., **kwargs):
-        super().__init__(instance, data, **kwargs)
+        x = super().__init__(instance, data, **kwargs)
         survey = self.context.get('survey')
+        print(self.context)
         if survey:
+            
             self.fields['question'].queryset = survey.questions.all()
             self.fields['chosen_choice'].queryset = Choice.objects.filter(question__survey= survey)
+
     
     def validate(self, attrs):
         survey = self.context.get('survey', None)
@@ -484,7 +525,7 @@ class ChoiceResaultSerializer(serializers.ModelSerializer):
         return obj.times_selected
     
     def get_percentage(self, obj):
-        total = obj.question.times_answered
+        total = self.context.get('times_answered_question')
         if total == 0:
             return 0
         return round((obj.times_selected / total) * 100, 2)
@@ -509,16 +550,17 @@ class QuestionResaultSerializer(serializers.ModelSerializer):
     def get_choices(self, obj):
         return ChoiceResaultSerializer(
             obj.prefetched_choices,
-            many=True
+            many=True,
+            context={'times_answered_question': obj.times_answered}
         ).data
-
-    def get_times_answered(self, obj):
-        return obj.times_answered
     
     def get_text_answers(self, obj):
         if obj.question_type != 'free_text':
             return None
         return [A.text_answer for A in obj.prefetched_text_answers]
+
+    def get_times_answered(self, obj):
+        return obj.times_answered
     
     def to_representation(self, instance):
         data = super().to_representation(instance)
