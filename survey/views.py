@@ -12,6 +12,8 @@ from .serializers import (
     SurveyCreateSerializer,
     SurveyListSerializer,
     SurveyDetailSerializer,
+    SurveyDetailReadSerializer,
+    SurveyDetailWriteSerializer,
     SurveyUpdateMessageSerializer,
     SurveyCreatedMessageSerializer,
     SubmissionSerializer,
@@ -54,12 +56,19 @@ class SurveyListCreateView(generics.ListCreateAPIView):
             Survey.objects.none()
         
 class SurveyDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Survey.objects.prefetch_related('questions__choices') \
-        .annotate(submission_count=Count('submissions', distinct=True))
+    queryset = Survey.objects.prefetch_related(Prefetch('questions',
+                                                        queryset=Question.objects.prefetch_related('choices'),
+                                                        to_attr='prefetched_questions')) \
+        .annotate(submission_count=Count('submissions', distinct=True)) \
+        .select_related('user')
     lookup_field = 'slug'
-    serializer_class = SurveyDetailSerializer
     permission_classes = [IsOwnerOrSuperuser]
     http_method_names = ["get", "put", "options", "delete", 'head']
+
+    def get_serializer_class(self, *args, **kwargs):
+        if self.request.method == 'PUT':
+            return SurveyDetailWriteSerializer
+        return SurveyDetailReadSerializer
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -75,7 +84,6 @@ class SurveyDetailView(generics.RetrieveUpdateDestroyAPIView):
         question_count = len(serializer.validated_data.get('questions'))
         response_serializer = SurveyUpdateMessageSerializer(survey, context={'request': request,
                                                                              'question_count': question_count})
-        print(response_serializer.data, survey)
         return Response(response_serializer.data, status= status.HTTP_200_OK)
 
 class SubmissionView(APIView):

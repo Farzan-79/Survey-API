@@ -199,22 +199,26 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
         return obj.submission_count
 
     def validate(self, attrs):
-        #? Bulk-validate ownership of incoming question and choice IDs:
-        #? - every incoming question id must belong to this survey
-        #? - every incoming choice id must belong to the question it was declared under
-        #? This runs once and uses bulk queries, avoiding N DB hits.
-        #? we only check those with IDs, those without IDs are going to be created and have no need of validating
+        """
+        Bulk-validate nested update payload.
+
+        Goals:
+        - validate local payload consistency (duplicate titles, min choices, etc.)
+        - validate ownership of IDs (question.id belongs to this survey, choice.id belongs to declared question)
+        - do it with NO N+1 queries (ideally 0 extra queries if prefetched objects exist)
+        """
 
         instance = getattr(self, 'instance', None)
         if not instance:
-            #* survey not provided, this serializer does not handle create
             raise ValidationError("Survey Not Found", code=404)
-        
         incoming_questions = attrs.get('questions')
         if not incoming_questions:
             raise ValidationError({"Survey": "A Survey must have at least one Question"})
-        
-        #? Validate Name Uniqueness and counts
+
+
+        # ---------------------------------------------------------------------
+        # 1) Payload-only validation (doesn't touch DB)
+        # ---------------------------------------------------------------------
         q_titles = []
         for q in incoming_questions:
             qq = q.get('title')
@@ -226,6 +230,7 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
                 incoming_choices = q.get('choices', [])
                 if len(incoming_choices) < 2:
                     raise ValidationError(f"A Multiple-Choice Question can't have less than 2 choices: '{qq}'")
+
                 c_titles = []
                 for c in incoming_choices:
                     cc = c.get('title')
@@ -235,62 +240,101 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
 
             elif q.get('question_type') == 'free_text':
                 if q.get('choices'):
-                    raise ValidationError(f"A Free-Text Question Can't accept Choices: '{qq}'")
+                    raise ValidationError(f"A Free-Text Question can't accept choices: '{qq}'")
 
-        
-        #? VALIDATING OWNERSHIP
-        incoming_q_ids = set() #* a set of all the incoming question with IDs
-        incoming_declared_choice_to_question = {} #* a dict of choice IDs as keys, and their declared questions IDs and their value
-        #* collecting the above vars:
-        for q in incoming_questions: 
+
+        # ---------------------------------------------------------------------
+        # 2) Collect incoming IDs (still no DB)
+        # ---------------------------------------------------------------------
+        incoming_q_ids = set()  # question IDs provided by client
+        incoming_declared_choice_to_question = {}  # choice_id -> declared_question_id
+
+        for q in incoming_questions:
             qid = q.get('id')
             if qid:
                 incoming_q_ids.add(qid)
-            for c in q.get('choices', []) or []:
+
+            for c in (q.get('choices') or []):
                 cid = c.get('id')
                 if cid is not None and qid is not None:
+                    # client says: this existing choice belongs under this existing question
                     incoming_declared_choice_to_question[cid] = qid
                 elif cid is not None and qid is None:
-                    #* client supplies a choice id but not the parent question id: ambiguous
+                    # client gave choice.id but didn't tell us which existing question it belongs to
                     raise ValidationError({
-                        "questions": 
-                            "When sending existing choice.id you must also provide the parent question id."})
-        
-        #? Validate question ownership in bulk:
+                        "questions": "When sending existing choice.id you must also provide the parent question id."
+                    })
+
+
+        # ---------------------------------------------------------------------
+        # 3) Get existing questions/choices in-memory (NO DB if prefetched exists)
+        # ---------------------------------------------------------------------
+        # Your view uses:
+        # Prefetch('questions', queryset=Question.objects.prefetch_related('choices'), to_attr='prefetched_questions')
+        # So instance.prefetched_questions should be a Python list already loaded.
+        existing_question_qs = getattr(instance, 'prefetched_questions', None)
+
+        # If someone calls this serializer without that view/queryset, fallback safely.
+        # (This fallback WILL query, but it prevents crashing.)
+        if existing_question_qs is None:
+            existing_question_qs = list(
+                instance.questions.all().prefetch_related('choices')
+            )
+
+        existing_q_ids = {q.id for q in existing_question_qs}
+
+
+        # ---------------------------------------------------------------------
+        # 4) Validate incoming question ids belong to this survey (no DB)
+        # ---------------------------------------------------------------------
         if incoming_q_ids:
-            #* checking if the incoming ids are in DB:
-            question_qs = Question.objects.filter(id__in=incoming_q_ids).only('id', 'survey_id')
-            db_q_ids = set(q.id for q in question_qs)
-            missing_question_ids = incoming_q_ids - db_q_ids
-            if missing_question_ids:
-                raise ValidationError({'questions': f'Question IDs not found: {sorted(missing_question_ids)}'})
-            
-            #* ensure all those questions belong to this survey
-            wrong_question = [q.id for q in question_qs if q.survey_id != instance.id]
-            if wrong_question:
-                raise ValidationError({'questions': f'Question IDs do not belong to this survey: {sorted(wrong_question)}'})
-        
-        #? Validate Choice ownership in bulk
+            invalid_q_ids = incoming_q_ids - existing_q_ids
+            if invalid_q_ids:
+                raise ValidationError({
+                    'questions': f'Invalid question ids for this survey: {sorted(invalid_q_ids)}'
+                })
+
+
+        # ---------------------------------------------------------------------
+        # 5) Validate incoming choice ids + ownership (no DB)
+        # ---------------------------------------------------------------------
         if incoming_declared_choice_to_question:
-            #* checking if the incoming ids are in DB:
-            incoming_c_ids = list(incoming_declared_choice_to_question.keys())
-            choice_qs = Choice.objects.filter(id__in=incoming_c_ids).only('id', 'question_id')
-            db_c_ids = set(c.id for c in choice_qs)
-            missing_choice_ids = set(incoming_c_ids) - db_c_ids
-            if missing_choice_ids:
-                raise ValidationError({'questions': f'Choice ids not found: {sorted(missing_choice_ids)}'})
-            
-            #* check that each declared choice belongs to the declared question
+            # Build a map: existing choice_id -> actual parent question_id
+            # This uses prefetched choices, so it does NOT hit the DB.
+            existing_choice_parent = {}
+            for q in existing_question_qs:
+                for c in q.choices.all():  # uses prefetch cache
+                    existing_choice_parent[c.id] = q.id
+
+            incoming_c_ids = set(incoming_declared_choice_to_question.keys())
+
+            # 5a) Do all incoming choice IDs exist inside THIS survey?
+            invalid_choice_ids = incoming_c_ids - set(existing_choice_parent.keys())
+            if invalid_choice_ids:
+                raise ValidationError({
+                    'choices': f'Invalid choice ids for this survey: {sorted(invalid_choice_ids)}'
+                })
+
+            # 5b) Does each choice belong to the declared question?
             mismatch = []
-            for c in choice_qs:
-                declared_parent_q_id = incoming_declared_choice_to_question.get(c.id)
-                if c.question_id != declared_parent_q_id:
-                    mismatch.append({'choice_id': c.id, 'actual_question_id': c.question_id, 'declared_question_id': declared_parent_q_id})
+            for cid, declared_qid in incoming_declared_choice_to_question.items():
+                actual_qid = existing_choice_parent.get(cid)
+                if actual_qid != declared_qid:
+                    mismatch.append({
+                        'choice_id': cid,
+                        'actual_question_id': actual_qid,
+                        'declared_question_id': declared_qid
+                    })
+
             if mismatch:
-                raise ValidationError({'questions': 'Some choice ids do not belong to the declared question', 'details': mismatch})
-    
+                raise ValidationError({
+                    'choices': 'Some choice ids do not belong to the declared question.',
+                    'details': mismatch
+                })
+
         return attrs
-    
+
+
     @transaction.atomic
     def update(self, instance: Survey, validated_data):
         #? Deterministic PUT semantics:
@@ -298,16 +342,20 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
         #?   - For questions: update if id provided and belongs to this survey; create otherwise
         #?   - Remove DB questions not present in incoming list (replace semantics)
         #?   - For each question handle choices similarly (update/create/delete)
-
+     
         #* popping the question data out to handle later
         question_data = validated_data.pop('questions', None)
 
-        #* Update survey base fields
+        #* Update survey fields (optional micro-opt: update_fields)
+        changed = False
         for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
+            if getattr(instance, attr) != value:
+                setattr(instance, attr, value)
+                changed = True
+        if changed:
+            instance.save()
         
-        existing_questions = list(instance.questions.all().only('id')) #* list of all existing question objects in this survey
+        existing_questions = list(getattr(instance, "prefetched_questions", instance.questions.all())) #* list of all existing question objects in this survey, if the prefetched data does not exist, fallback to db
         existing_questions_dict = {q.id: q for q in existing_questions} #* dict of question.id --> question object
         question_to_keep = set() #* a set of IDs of questions to keep
 
@@ -318,14 +366,16 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
             choice_data = q_data.pop('choices', []) or None
 
             if q_id is not None: 
-                #* question exists, and we validated it before, so UPDATE
-                q_obj = existing_questions_dict.get(q_id)
-
+                #* question exists, and we validated it before, so: UPDATE if changed
+                q_obj = existing_questions_dict[q_id]
+                q_changed = False
                 for attr, value in q_data.items():
-                    setattr(q_obj, attr, value)
-                q_obj.save()
+                    if getattr(q_obj, attr) != value:
+                        setattr(q_obj, attr, value)
+                        q_changed = True
+                if q_changed:
+                    q_obj.save()
                 question_to_keep.add(q_obj.id)
-
             else: 
                 #* create a new question
                 q_obj = Question.objects.create(survey=instance, **q_data)
@@ -335,14 +385,12 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
                 #* no nested choices, go to the next question
                 continue
 
-            existing_choices = list(q_obj.choices.all().only('id')) #* list of all existing choices objects in this question
+            existing_choices = list(q_obj.choices.all()) if q_id else [] #* list of all existing choices objects in this question
             existing_choices_dict = {c.id: c for c in existing_choices} #* dict of choice.id --> choice object
             choices_to_keep = set() #* a set of IDs of questions to keep
 
             for c_data in choice_data:
-                c_id = c_data.get('id', None)
-
-                
+                c_id = c_data.get('id', None) 
                 if c_id is not None:
                     #* the choice id exists, and is validated before, UPDATE
                     c_obj = existing_choices_dict.get(c_id)
@@ -351,8 +399,6 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
                         setattr(c_obj, attr, value)
                     c_obj.save()
                     choices_to_keep.add(c_obj.id)
-                
-            
                 else:
                     #* create new choice
                     c_obj = Choice.objects.create(question=q_obj, **c_data)
@@ -367,6 +413,18 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
             Question.objects.filter(id__in=questions_to_delete).delete()
 
         return instance
+
+#*------------- PARTIAL DETAIL SERIALIZERS --------------
+class SurveyDetailWriteSerializer(SurveyDetailSerializer):
+    questions = QuestionSerializer(many=True)
+
+class SurveyDetailReadSerializer(SurveyDetailSerializer):
+    questions = serializers.SerializerMethodField()
+
+    def get_questions(self, obj):
+        qs= obj.prefetched_questions
+        return QuestionSerializer(qs, many=True, context=self.context).data
+#* ------------------------------------------------------
 
 class SurveyUpdateMessageSerializer(serializers.ModelSerializer):
     detail_url = serializers.HyperlinkedIdentityField(view_name= 'survey:detail', lookup_field= 'slug')
@@ -407,9 +465,7 @@ class AnswerSerializer(serializers.ModelSerializer):
     def __init__(self, instance=None, data=..., **kwargs):
         x = super().__init__(instance, data, **kwargs)
         survey = self.context.get('survey')
-        print(self.context)
         if survey:
-            
             self.fields['question'].queryset = survey.questions.all()
             self.fields['chosen_choice'].queryset = Choice.objects.filter(question__survey= survey)
 
