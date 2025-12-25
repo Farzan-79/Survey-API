@@ -53,7 +53,7 @@ class SurveyListCreateView(generics.ListCreateAPIView):
                 .annotate(question_count=Count('questions', distinct=True)) \
                 .annotate(submission_count=Count('submissions', distinct=True))
         else:
-            Survey.objects.none()
+            return Survey.objects.none()
         
 class SurveyDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Survey.objects.prefetch_related(Prefetch('questions',
@@ -81,8 +81,13 @@ class SurveyDetailView(generics.RetrieveUpdateDestroyAPIView):
             #* forcibly invalidate the prefetch cache on the instance.
             instance._prefetched_objects_cache = {}
 
-        question_count = len(serializer.validated_data.get('questions'))
-        response_serializer = SurveyUpdateMessageSerializer(survey, context={'request': request,
+        question_count = len(serializer.validated_data.get('questions')) if serializer.validated_data.get('questions') else survey.questions.count()
+        if serializer._frozen:
+            response_serializer = SurveyUpdateMessageSerializer(survey, context={'request': request,
+                                                                             'question_count': question_count,
+                                                                             'frozen': True})
+        else:
+            response_serializer = SurveyUpdateMessageSerializer(survey, context={'request': request,
                                                                              'question_count': question_count})
         return Response(response_serializer.data, status= status.HTTP_200_OK)
 
