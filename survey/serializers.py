@@ -86,7 +86,9 @@ class SurveyListSerializer(serializers.ModelSerializer):
         return obj.user.username if obj.user else None
 
     def get_total_responses(self, obj):
-        return obj.submission_count
+        if hasattr(obj, "submission_count"):
+            return obj.submission_count
+        return obj.submissions.count()
 
     def get_question_count(self, obj):
         return obj.question_count
@@ -196,7 +198,9 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
         ]
 
     def get_total_responses(self, obj):
-        return getattr(obj, "submission_count", obj.submissions.count())
+        if hasattr(obj, "submission_count"):
+            return obj.submission_count
+        return obj.submissions.count()
 
     def validate(self, attrs):
         """
@@ -213,7 +217,10 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
             raise ValidationError("Survey Not Found", code=404)
         
         #* if there is a submission on this survey, it must be frozen and the questions can't change
-        submission_count = getattr(instance, "submission_count", instance.submissions.count())
+        if hasattr(instance, 'submission_count'):
+            submission_count = instance.submission_count
+        else:
+            submission_count = instance.submissions.count()
         self._frozen = False
         if submission_count > 0:
             if 'questions' in attrs:
@@ -328,8 +335,7 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
                     'choices': f'Invalid choice ids for this survey: {sorted(invalid_choice_ids)}'
                 })
 
-            print(f'incoming: {incoming_choice_to_question}')
-            print(f'existing: {existing_choice_to_quesiton}')
+
             #* 5b) Does each choice belong to the declared question?
             mismatch = []
             for cid, declared_qid in incoming_choice_to_question.items():
@@ -370,7 +376,6 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
         if changed:
             instance.save()
 
-        submission_count = getattr(instance, "submission_count", instance.submissions.count())
         if self._frozen:
             return instance
         
@@ -435,7 +440,7 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
 
 #*------------- PARTIAL DETAIL SERIALIZERS --------------
 class SurveyDetailWriteSerializer(SurveyDetailSerializer):
-    questions = QuestionSerializer(many=True)
+    questions = QuestionSerializer(many=True, write_only=True)
 
 class SurveyDetailReadSerializer(SurveyDetailSerializer):
     questions = serializers.SerializerMethodField()

@@ -2,7 +2,11 @@
 """Django's command-line utility for administrative tasks."""
 import os
 import sys
+import dotenv
+from pathlib import Path
 
+BASE_DIR = Path(__file__).resolve().parent  # folder that contains manage.py
+dotenv.read_dotenv(BASE_DIR / ".env")       # loads into os.environ
 
 def main():
     """Run administrative tasks."""
