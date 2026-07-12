@@ -17,7 +17,7 @@ class Survey(models.Model):
         ordering = ['created']
         constraints = [
             models.UniqueConstraint(
-                fields=['title'],
+                fields=['title', 'user'],
                 name= 'uniq_survey_title'
             )
         ]

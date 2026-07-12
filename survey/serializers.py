@@ -46,8 +46,6 @@ class QuestionSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         if instance.question_type == 'free_text':
             data.pop('choices', None)
-        elif instance.question_type == 'free_text':
-            data.pop('multiple_choice', None)
         return data
 
 class QuestionCreateSerializer(WritableNestedModelSerializer):
@@ -70,6 +68,7 @@ class SurveyListSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)
     total_responses = serializers.SerializerMethodField(read_only=True)
     user = serializers.SerializerMethodField(read_only= True)
+    slug = serializers.SerializerMethodField(read_only= True)
 
     class Meta:
         model = Survey
@@ -79,7 +78,8 @@ class SurveyListSerializer(serializers.ModelSerializer):
             'id',
             'question_count',
             'total_responses',
-            'url'
+            'url',
+            'slug'
         ]
 
     def get_user(self, obj):
@@ -98,6 +98,9 @@ class SurveyListSerializer(serializers.ModelSerializer):
         if not self.context.get('request').user.is_superuser:
             fields.pop('user')
         return fields
+    
+    def get_slug(self, obj):
+        return obj.slug
 
 class SurveyCreateSerializer(WritableNestedModelSerializer):
     questions = QuestionCreateSerializer(many=True, required=True)
@@ -440,7 +443,7 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
 
 #*------------- PARTIAL DETAIL SERIALIZERS --------------
 class SurveyDetailWriteSerializer(SurveyDetailSerializer):
-    questions = QuestionSerializer(many=True, write_only=True)
+    questions = QuestionSerializer(many=True, write_only=False)
 
 class SurveyDetailReadSerializer(SurveyDetailSerializer):
     questions = serializers.SerializerMethodField()
