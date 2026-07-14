@@ -35,7 +35,7 @@ class Question(models.Model):
     title = models.CharField(max_length=255)
     question_type = models.CharField(max_length=15,
                                      choices=[('multiple_choice', 'Multiple Choice'), ('free_text', 'Free Text')])
-    required = models.BooleanField(default=False)
+    required = models.BooleanField(default=True)
 
     def __str__(self):
         return self.title
@@ -79,6 +79,14 @@ class Submission(models.Model):
 
     def __str__(self):
         return f"Response #{self.id} to '{self.survey.title}'"
+    
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['survey', 'user'],
+                name= 'uniq_submission_per_user'
+            )
+        ]
 
 
 class Answer(models.Model):

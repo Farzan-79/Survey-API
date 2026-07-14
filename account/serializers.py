@@ -20,15 +20,18 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
     def validate_Username(self, value):
         if len(value) < 3:
-            raise serializers.ValidationError("Usernames should have at least 3 characters")
+            raise serializers.ValidationError({"Username:" "Usernames should have at least 3 characters"},
+                                              code= "username_too_short")
         if User.objects.filter(username=value).exists():
-            raise serializers.ValidationError("This Username is Taken")
+            raise serializers.ValidationError({"Username": "This Username is Taken"},
+                                              code= "duplicate_username")
         return value
     
     def validate_Email(self, value):
         validate_email(value)
         if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError("This Email is Taken")
+            raise serializers.ValidationError({"Email": "This Email is Taken"},
+                                              code= "duplicate_email")
         return value
     
     def validate_Password(self, value):

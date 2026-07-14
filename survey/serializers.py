@@ -2,8 +2,8 @@ from rest_framework import serializers
 from django.db import transaction
 from drf_writable_nested import WritableNestedModelSerializer
 from rest_framework.serializers import ValidationError
-
-from .validators import Survey_unq_validator
+from rest_framework.fields import empty
+from .validators import Survey_unq_validator, validate_questions_payload
 from .models import Survey, Question, Choice, Answer, Submission
 
 
@@ -78,8 +78,8 @@ class SurveyListSerializer(serializers.ModelSerializer):
             'id',
             'question_count',
             'total_responses',
-            'url',
-            'slug'
+            'slug',
+            'url'
         ]
 
     def get_user(self, obj):
@@ -91,7 +91,9 @@ class SurveyListSerializer(serializers.ModelSerializer):
         return obj.submissions.count()
 
     def get_question_count(self, obj):
-        return obj.question_count
+        if hasattr(obj, "question_count"):
+            return obj.question_count
+        return obj.questions.count()
         
     def get_fields(self):
         fields = super().get_fields()
@@ -131,29 +133,12 @@ class SurveyCreateSerializer(WritableNestedModelSerializer):
     
     def validate(self, attrs):
         incoming_questions = attrs.get('questions')
+        if not incoming_questions:
+            raise ValidationError({"questions": "A Survey must have at least one Question"},
+                                  code= "no_questions")
         
-        #* Validate Name Uniqueness
-        q_titles = []
-        for q in incoming_questions:
-            qq = q.get('title')
-            if qq in q_titles:
-                raise ValidationError({"questions": f"Duplicate question title in this survey: '{qq}'"})
-            q_titles.append(qq)
-
-            if q.get('question_type') == 'multiple_choice':
-                incoming_choices = q.get('choices', [])
-                if len(incoming_choices) < 2:
-                    raise ValidationError(f"A Multiple-Choice Question can't have less than 2 choices: '{qq}'")
-                c_titles = []
-                for c in incoming_choices:
-                    cc = c.get('title')
-                    if cc in c_titles:
-                        raise ValidationError({"choices": f"Duplicate choice in question '{qq}': '{cc}'"})
-                    c_titles.append(cc)
-
-            elif q.get('question_type') == 'free_text':
-                if q.get('choices'):
-                    raise ValidationError(f"A Free-Text Question Can't accept Choices: '{qq}'")
+        #* Validate Question and Choices in the Payload
+        validate_questions_payload(incoming_questions)
         return attrs
 
 class SurveyCreatedMessageSerializer(serializers.ModelSerializer):
@@ -217,7 +202,8 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
 
         instance = getattr(self, 'instance', None)
         if not instance:
-            raise ValidationError("Survey Not Found", code=404)
+            raise ValidationError({"survey":"Survey Not Found"},
+                                   code="survey_not_found")
         
         #* if there is a submission on this survey, it must be frozen and the questions can't change
         if hasattr(instance, 'submission_count'):
@@ -233,35 +219,14 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
         
         incoming_questions = attrs.get('questions')
         if not incoming_questions:
-            raise ValidationError({"Survey": "A Survey must have at least one Question"})
+            raise ValidationError({"questions": "A Survey must have at least one Question"},
+                                  code= "no_questions")
 
 
         #? ---------------------------------------------------------------------
         #? 1) Payload-only validation (doesn't touch DB)
         #? ---------------------------------------------------------------------
-        q_titles = []
-        for q in incoming_questions:
-            qq = q.get('title')
-            if qq in q_titles:
-                raise ValidationError({"questions": f"Duplicate question title in this survey: '{qq}'"})
-            q_titles.append(qq)
-
-            if q.get('question_type') == 'multiple_choice':
-                incoming_choices = q.get('choices', [])
-                if len(incoming_choices) < 2:
-                    raise ValidationError(f"A Multiple-Choice Question can't have less than 2 choices: '{qq}'")
-
-                c_titles = []
-                for c in incoming_choices:
-                    cc = c.get('title')
-                    if cc in c_titles:
-                        raise ValidationError({"choices": f"Duplicate choice in question '{qq}': '{cc}'"})
-                    c_titles.append(cc)
-
-            elif q.get('question_type') == 'free_text':
-                if q.get('choices'):
-                    raise ValidationError(f"A Free-Text Question can't accept choices: '{qq}'")
-
+        validate_questions_payload(incoming_questions)
 
         #? ---------------------------------------------------------------------
         #? 2) Collect incoming IDs (still no DB)
@@ -284,9 +249,8 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
                     incoming_choice_to_question[cid] = qid
                 elif cid is not None and qid is None:
                     #* client gave choice.id but didn't tell us which existing question it belongs to
-                    raise ValidationError({
-                        "questions": "When sending existing choice.id you must also provide the parent question id."
-                    })
+                    raise ValidationError({"choices": "When sending existing choice.id you must also provide the parent question id."},
+                                          code= "question_id_not_provided")
 
 
         #? ---------------------------------------------------------------------
@@ -313,9 +277,8 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
         if incoming_q_ids:
             invalid_q_ids = incoming_q_ids - existing_q_ids
             if invalid_q_ids:
-                raise ValidationError({
-                    'questions': f'Invalid question ids for this survey: {sorted(invalid_q_ids)}'
-                })
+                raise ValidationError({'questions': f'Invalid question ids for this survey: {sorted(invalid_q_ids)}'},
+                                      code= "invalid_question_id")
 
 
         #? ---------------------------------------------------------------------
@@ -334,9 +297,8 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
             #* 5a) Do all incoming choice IDs exist inside THIS survey?
             invalid_choice_ids = incoming_c_ids - set(existing_choice_to_quesiton.keys())
             if invalid_choice_ids:
-                raise ValidationError({
-                    'choices': f'Invalid choice ids for this survey: {sorted(invalid_choice_ids)}'
-                })
+                raise ValidationError({'choices': f'Invalid choice ids for this survey: {sorted(invalid_choice_ids)}'},
+                                      code= "invalid_choice_id")
 
 
             #* 5b) Does each choice belong to the declared question?
@@ -351,10 +313,8 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
                     })
 
             if mismatch:
-                raise ValidationError({
-                    'choices': 'Some choice ids do not belong to the declared question.',
-                    'details': mismatch
-                })
+                raise ValidationError({'choices': 'Some choice ids do not belong to the declared question.'},
+                                      code= "choice_id_mismatch_question_id")
 
         return attrs
 
@@ -394,7 +354,10 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
 
             if q_id is not None: 
                 #* question exists, and we validated it before, so: UPDATE if changed
-                q_obj = existing_questions_dict[q_id]
+                q_obj = existing_questions_dict.get(q_id)
+                if q_obj is None:
+                    raise ValidationError({"questions": f"Question id {q_id} no longer exists on this survey."},
+                                          code= "question_does_not_exist")
                 q_changed = False
                 for attr, value in q_data.items():
                     if getattr(q_obj, attr) != value:
@@ -421,7 +384,9 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
                 if c_id is not None:
                     #* the choice id exists, and is validated before, UPDATE
                     c_obj = existing_choices_dict.get(c_id)
-
+                    if c_obj is None:
+                        raise ValidationError({"choices": f"Choice id {c_id} no longer exists on this question."},
+                                              code= "choice_does_not_exist")
                     for attr, value in c_data.items():
                         setattr(c_obj, attr, value)
                     c_obj.save()
@@ -495,7 +460,7 @@ class AnswerSerializer(serializers.ModelSerializer):
             'text_answer' : {'allow_null':True, 'required': False, 'allow_blank': True}
         }
 
-    def __init__(self, instance=None, data=..., **kwargs):
+    def __init__(self, instance=None, data=empty, **kwargs):
         x = super().__init__(instance, data, **kwargs)
         survey = self.context.get('survey')
         if survey:
@@ -511,31 +476,45 @@ class AnswerSerializer(serializers.ModelSerializer):
 
 
         if not question:
-            raise ValidationError({'question': 'Question is required.'})
-        
-        if question.survey_id != survey.id:
-            raise ValidationError({'question': 'This Question does not belong to this Survey'})
+            raise ValidationError(
+                {'question': 'Question is required.'},
+                code= "question_required")
         
         if question.question_type == 'multiple_choice':
             if not chosen_choice:
-                raise ValidationError({'chosen_choice': 'This field is required for multiple choice questions.'})
+                raise ValidationError(
+                    {'chosen_choice': 'This field is required for multiple choice questions.'},
+                    code="choice_required_for_multiple_choice"
+                    )
             if text_answer:
-                raise ValidationError({'text_answer': 'Multiple choice questions cannot have text answers.'})
+                raise ValidationError(
+                    {'text_answer': 'Multiple choice questions cannot have text answers.'},
+                    code="text_answer_not_allowed_for_multiple_choice"
+                    )
             if chosen_choice.question_id != question.id:
-                raise ValidationError({'chosen_choice': 'This choice does not belong to the selected question.'})
+                raise ValidationError(
+                    {'chosen_choice': 'This choice does not belong to the selected question.'},
+                    code="choice_does_not_belong_to_declared_question"
+                    )
             
         elif question.question_type == 'free_text':
             if not text_answer:
-                raise ValidationError({'text_answer': 'This field is required for free text questions.'})
+                raise ValidationError(
+                    {'text_answer': 'This field is required for free text questions.'},
+                    code="text_answer_required_for_free_text"
+                    )
             if chosen_choice:
-                raise ValidationError({'chosen_choice': 'Free Text questions cannot have choices.'})
+                raise ValidationError(
+                    {'chosen_choice': 'Free Text questions cannot have choices.'},
+                    code="choisen_choice_not_allowed_for_free_text"
+                    )
             
         else:
-            raise ValidationError({'question': f'Unsupported question_type: {question.question_type}'})
+            raise ValidationError(
+                {'question': f'Unsupported question_type: {question.question_type}'},
+                code="unsupported_question_type"
+                )
         
-        
-
-
         return attrs
     
 class SubmissionSerializer(serializers.ModelSerializer):
@@ -544,10 +523,9 @@ class SubmissionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Submission
         fields = [
-            'answers',
-            'user'
+            'answers',      
         ]
-        read_only_fields = ['id', 'created']
+        read_only_fields = ['user', 'id', 'created']
 
     def get_fields(self):
         fields = super().get_fields()
@@ -567,12 +545,15 @@ class SubmissionSerializer(serializers.ModelSerializer):
 
         missing_questions = required_questions - answered_questions
         if len(missing_questions) > 0:
-             raise ValidationError({"required_questions": 
-                                        {'id': list(missing_questions)}
-                                    })
+            raise ValidationError(
+                {"answers": f"Missing required questions: {sorted(missing_questions)}"},
+                code="missing_required_questions"
+                )
 
         if len(answered_questions) != len(answers): #* missing questions is a set, and duplicates are deleted
-            raise ValidationError("Duplicate answers for the same question are not allowed.")       
+            raise ValidationError(
+                {"questions": "Duplicate answers for the same question are not allowed."},
+                code= "question_answered_multiple_times_not_allowed")       
         return attrs
     
     @transaction.atomic
@@ -586,7 +567,8 @@ class SubmissionSerializer(serializers.ModelSerializer):
         if user and user.is_authenticated:
             if Submission.objects.filter(user=user, survey=survey).exists():
                 raise serializers.ValidationError(
-                    f'{user.username}, You have already answered this question.'
+                    f'{user.username}, You have already answered this question.',
+                    code= "duplicate_submission"
                 )
             
         submission = Submission.objects.create(survey=survey, user=user)
