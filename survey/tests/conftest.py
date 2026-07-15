@@ -33,6 +33,15 @@ def question(survey):
     )
 
 @pytest.fixture
+def ft_question(survey):
+    return Question.objects.create(
+        survey= survey,
+        title= 'Explain yourself',
+        question_type= 'free_text',
+        required= True
+    )
+
+@pytest.fixture
 def choices(question):
     for n in range(4):
         Choice.objects.create(title=f'Choice {n}', question=question)
@@ -53,6 +62,10 @@ def answer(question, submission, choices):
 def api_rf(rf):
     def _make_request(method='get', user=None):
         request = getattr(rf, method.lower())('/fake-url/')
-        request.user = user if user is not None else AnonymousUser
+        request.user = user if user is not None else AnonymousUser()
         return request
     return _make_request
+
+#! ----------------------- SERIALIZERS -----------------------
+
+

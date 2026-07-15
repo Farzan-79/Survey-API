@@ -5,6 +5,7 @@ from rest_framework.serializers import ValidationError
 from rest_framework.fields import empty
 from .validators import Survey_unq_validator, validate_questions_payload
 from .models import Survey, Question, Choice, Answer, Submission
+from django.db.utils import IntegrityError
 
 
 #! --------------- CHOICE SERIALIZERS -------------------
@@ -133,9 +134,6 @@ class SurveyCreateSerializer(WritableNestedModelSerializer):
     
     def validate(self, attrs):
         incoming_questions = attrs.get('questions')
-        if not incoming_questions:
-            raise ValidationError({"questions": "A Survey must have at least one Question"},
-                                  code= "no_questions")
         
         #* Validate Question and Choices in the Payload
         validate_questions_payload(incoming_questions)
@@ -218,11 +216,7 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
             return attrs
         
         incoming_questions = attrs.get('questions')
-        if not incoming_questions:
-            raise ValidationError({"questions": "A Survey must have at least one Question"},
-                                  code= "no_questions")
-
-
+        
         #? ---------------------------------------------------------------------
         #? 1) Payload-only validation (doesn't touch DB)
         #? ---------------------------------------------------------------------
@@ -447,7 +441,6 @@ class AnswerSerializer(serializers.ModelSerializer):
     chosen_choice = serializers.PrimaryKeyRelatedField(queryset= Choice.objects.none(),
                                                        allow_null= True,
                                                        required= False,)
-    
 
     class Meta:
         model = Answer
@@ -473,12 +466,6 @@ class AnswerSerializer(serializers.ModelSerializer):
         question = attrs.get('question')
         chosen_choice = attrs.get('chosen_choice')
         text_answer = attrs.get('text_answer')
-
-
-        if not question:
-            raise ValidationError(
-                {'question': 'Question is required.'},
-                code= "question_required")
         
         if question.question_type == 'multiple_choice':
             if not chosen_choice:
@@ -506,7 +493,7 @@ class AnswerSerializer(serializers.ModelSerializer):
             if chosen_choice:
                 raise ValidationError(
                     {'chosen_choice': 'Free Text questions cannot have choices.'},
-                    code="choisen_choice_not_allowed_for_free_text"
+                    code="chosen_choice_not_allowed_for_free_text"
                     )
             
         else:
@@ -552,7 +539,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
 
         if len(answered_questions) != len(answers): #* missing questions is a set, and duplicates are deleted
             raise ValidationError(
-                {"questions": "Duplicate answers for the same question are not allowed."},
+                {"answers": "Duplicate answers for the same question are not allowed."},
                 code= "question_answered_multiple_times_not_allowed")       
         return attrs
     
@@ -567,11 +554,19 @@ class SubmissionSerializer(serializers.ModelSerializer):
         if user and user.is_authenticated:
             if Submission.objects.filter(user=user, survey=survey).exists():
                 raise serializers.ValidationError(
-                    f'{user.username}, You have already answered this question.',
+                    f'{user.username}, You have already answered this Survey.',
                     code= "duplicate_submission"
                 )
-            
-        submission = Submission.objects.create(survey=survey, user=user)
+        
+        try:
+            with transaction.atomic():
+                submission = Submission.objects.create(survey=survey, user=user)
+        except IntegrityError:
+            raise serializers.ValidationError(
+                    f'{user.username}, You have already answered this Survey.',
+                    code= "duplicate_submission"
+                )
+
 
         for answer in answers:
             Answer.objects.create(submission=submission, **answer)
