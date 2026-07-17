@@ -98,7 +98,8 @@ class SurveyListSerializer(serializers.ModelSerializer):
         
     def get_fields(self):
         fields = super().get_fields()
-        if not self.context.get('request').user.is_superuser:
+        request = self.context.get('request')
+        if request is None or not request.user.is_superuser:
             fields.pop('user')
         return fields
     
@@ -158,7 +159,9 @@ class SurveyCreatedMessageSerializer(serializers.ModelSerializer):
         return f'Your Survey has been saved successfuly: {obj.title}'
 
     def get_question_count(self, obj):
-        return self.context.get('question_count')
+        if 'question_count' in self.context:
+            return self.context.get('question_count')
+        return obj.questions.count()
 
 class SurveyDetailSerializer(serializers.ModelSerializer):
     #? Handles Update, Retrieve, and Delete
@@ -200,7 +203,7 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
 
         instance = getattr(self, 'instance', None)
         if not instance:
-            raise ValidationError({"survey":"Survey Not Found"},
+            raise ValidationError("Survey Not Found", # a non_field_error
                                    code="survey_not_found")
         
         #* if there is a submission on this survey, it must be frozen and the questions can't change
@@ -208,6 +211,7 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
             submission_count = instance.submission_count
         else:
             submission_count = instance.submissions.count()
+
         self._frozen = False
         if submission_count > 0:
             if 'questions' in attrs:
@@ -336,7 +340,11 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
         if self._frozen:
             return instance
         
-        existing_questions = list(getattr(instance, "prefetched_questions", instance.questions.all())) #* list of all existing question objects in this survey, if the prefetched data does not exist, fallback to db
+        if hasattr(instance, 'prefetched_questions'): #* list of all existing question objects in this survey, if the prefetched data does not exist, fallback to db
+            existing_questions = instance.prefetched_questions
+        else:
+            existing_questions = instance.questions.all()
+
         existing_questions_dict = {q.id: q for q in existing_questions} #* dict of question.id --> question object
         question_to_keep = set() #* a set of IDs of questions to keep
 
@@ -408,7 +416,11 @@ class SurveyDetailReadSerializer(SurveyDetailSerializer):
     questions = serializers.SerializerMethodField()
 
     def get_questions(self, obj):
-        qs= obj.prefetched_questions
+        if hasattr(obj, 'prefetched_questions'):
+            qs = obj.prefetched_questions
+        else:
+            qs = obj.questions.all()
+
         return QuestionSerializer(qs, many=True, context=self.context).data
 #* ------------------------------------------------------
 
@@ -429,11 +441,13 @@ class SurveyUpdateMessageSerializer(serializers.ModelSerializer):
     
     def get_message(self, obj):
         if self.context.get('frozen'):
-            return f'This Survey is frozen because it has already been answered: {obj.title} \n Only the title and Description were updated'
+            return f'This Survey is Frozen because it has already been answered: {obj.title} \n Only the title and Description were updated'
         return f'Survey Updated Successfully: {obj.title}'
     
     def get_question_count(self, obj):
-        return self.context.get('question_count') or obj.questions.count()
+        if 'question_count' in self.context:
+            return self.context.get('question_count')
+        return obj.questions.count()
 
 #! --------------- ANSWER SERIALIZERS --------------------
 class AnswerSerializer(serializers.ModelSerializer):
@@ -459,7 +473,6 @@ class AnswerSerializer(serializers.ModelSerializer):
         if survey:
             self.fields['question'].queryset = survey.questions.all()
             self.fields['chosen_choice'].queryset = Choice.objects.filter(question__survey= survey)
-
     
     def validate(self, attrs):
         survey = self.context.get('survey', None)
@@ -485,7 +498,7 @@ class AnswerSerializer(serializers.ModelSerializer):
                     )
             
         elif question.question_type == 'free_text':
-            if not text_answer:
+            if not text_answer or not text_answer.strip():
                 raise ValidationError(
                     {'text_answer': 'This field is required for free text questions.'},
                     code="text_answer_required_for_free_text"
@@ -587,14 +600,24 @@ class ChoiceResaultSerializer(serializers.ModelSerializer):
             'percentage'
         ]
     
+    def _times_selected(self, obj):
+        if hasattr(obj, 'times_selected'):
+            return obj.times_selected
+        return obj.answers.count()
+    
+    def _times_answered_question(self, obj):
+        if 'times_answered_question' in self.context:
+            return self.context.get('times_answered_question')
+        return obj.question.answers.count()
+
     def get_times_selected(self, obj):
-        return obj.times_selected
+        return self._times_selected(obj)
     
     def get_percentage(self, obj):
-        total = self.context.get('times_answered_question')
+        total = self._times_answered_question(obj)
         if total == 0:
             return 0
-        return round((obj.times_selected / total) * 100, 2)
+        return round((self._times_selected(obj) / total) * 100, 2)
 
 class QuestionResaultSerializer(serializers.ModelSerializer):
     choices = serializers.SerializerMethodField()
@@ -613,20 +636,36 @@ class QuestionResaultSerializer(serializers.ModelSerializer):
             'text_answers'
         ]
 
+    def _choices(self, obj):
+        if hasattr(obj, 'prefetched_choices'):
+            return obj.prefetched_choices
+        return obj.choices.all()
+
+    def _times_answered(self, obj):
+        if hasattr(obj, 'times_answered'):
+            return obj.times_answered
+        return obj.answers.count()
+    
+    def _text_answers(self, obj):
+        if hasattr(obj, 'prefetched_text_answers'):
+            return obj.prefetched_text_answers
+        return obj.answers.all()
+
     def get_choices(self, obj):
         return ChoiceResaultSerializer(
-            obj.prefetched_choices,
+            self._choices(obj),
             many=True,
-            context={'times_answered_question': obj.times_answered}
+            context={'times_answered_question': self._times_answered(obj)}
         ).data
     
     def get_text_answers(self, obj):
         if obj.question_type != 'free_text':
             return None
-        return [A.text_answer for A in obj.prefetched_text_answers]
+        text_answers = self._text_answers(obj)
+        return [A.text_answer for A in text_answers]
 
     def get_times_answered(self, obj):
-        return obj.times_answered
+        return self._times_answered(obj)
     
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -650,14 +689,24 @@ class SurveyResaultSerializer(serializers.ModelSerializer):
             'questions'
         ]
     
+    def _questions(self, obj):
+        if hasattr(obj, 'prefetched_questions'):
+            return obj.prefetched_questions
+        return obj.questions.all()
+    
+    def _total_responses(self, obj):
+        if hasattr(obj, 'times_submitted'):
+            return obj.times_submitted
+        return obj.submissions.count()
+
     def get_questions(self, obj):
         return QuestionResaultSerializer(
-            obj.prefetched_questions,
+            self._questions(obj),
             many=True
         ).data
 
     def get_total_responses(self, obj):
-        return obj.times_submitted       
+        return self._total_responses(obj)      
 
 
 

@@ -45,7 +45,7 @@ def ft_question(survey):
 def choices(question):
     for n in range(4):
         Choice.objects.create(title=f'Choice {n}', question=question)
-    return Choice.objects.all()
+    return question.choices.all()
 
 @pytest.fixture
 def submission(survey):
@@ -68,4 +68,11 @@ def api_rf(rf):
 
 #! ----------------------- SERIALIZERS -----------------------
 
+@pytest.fixture
+def full_survey(survey):
+    q1 = Question.objects.create(survey=survey, title='q1', question_type='multiple_choice', required=True)
+    Choice.objects.create(question=q1, title='c1')
+    Choice.objects.create(question=q1, title='c2')
+    Question.objects.create(survey=survey, title='q2', question_type='free_text', required=False)
+    return survey
 
