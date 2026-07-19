@@ -7,7 +7,12 @@ from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.db.models import Prefetch, Count
 
-from .models import *
+from .models import (
+    Survey,
+    Question,
+    Choice,
+    Answer,
+)
 from .serializers import (
     SurveyCreateSerializer,
     SurveyListSerializer,
@@ -34,7 +39,7 @@ class SurveyListCreateView(generics.ListCreateAPIView):
             return SurveyListSerializer
     
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
+        serializer = self.get_serializer(data=request.data, context={'user': request.user})
         serializer.is_valid(raise_exception=True)
         survey = serializer.save(user=request.user)
 
@@ -69,6 +74,11 @@ class SurveyDetailView(generics.RetrieveUpdateDestroyAPIView):
         if self.request.method == 'PUT':
             return SurveyDetailWriteSerializer
         return SurveyDetailReadSerializer
+    
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, context={'request': request})
+        return Response(serializer.data)
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -108,7 +118,7 @@ class SubmissionView(APIView):
         serializer = SubmissionSerializer(data=payload, context={'survey': survey, 'request': request})
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class ResaultsView(APIView):
     permission_classes = [IsOwnerOrSuperuser]

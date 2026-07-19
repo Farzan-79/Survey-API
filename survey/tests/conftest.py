@@ -2,6 +2,7 @@ import pytest
 from survey.models import Survey, Question, Choice, Answer, Submission
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
+from rest_framework.test import APIClient
 #* These fixtures are accessible by all the other tests. pytest gets them and gives them to whichever test needs them.
 
 @pytest.fixture(autouse=True) #* for faster user creation, with a weak password hashing
@@ -38,12 +39,12 @@ def ft_question(survey):
         survey= survey,
         title= 'Explain yourself',
         question_type= 'free_text',
-        required= True
+        required= False
     )
 
 @pytest.fixture
 def choices(question):
-    for n in range(4):
+    for n in range(1,5):
         Choice.objects.create(title=f'Choice {n}', question=question)
     return question.choices.all()
 
@@ -65,6 +66,10 @@ def api_rf(rf):
         request.user = user if user is not None else AnonymousUser()
         return request
     return _make_request
+
+@pytest.fixture
+def api_client():
+    return APIClient()
 
 #! ----------------------- SERIALIZERS -----------------------
 

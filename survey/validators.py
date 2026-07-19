@@ -4,7 +4,11 @@ from rest_framework.serializers import ValidationError
 
 
 
-Survey_unq_validator = UniqueValidator(queryset=Survey.objects.all(), lookup='iexact', message='Duplicate Survey Name')
+def survey_unq_validator(user):
+    if user:
+        return UniqueValidator(queryset=Survey.objects.filter(user=user), lookup='iexact', message='Duplicate Survey Name')
+    else:
+        return UniqueValidator(queryset=Survey.objects.all(), lookup='iexact', message='Duplicate Survey Name')
 
 def validate_questions_payload(incoming_questions):
     if not incoming_questions:

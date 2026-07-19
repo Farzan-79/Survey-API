@@ -181,7 +181,7 @@ def test_submission_serializer_creates_submissions_with_answers(survey, question
 @pytest.mark.django_db
 def test_submission_serializer_rejects_missing_required_question(survey, question, ft_question, choices, api_rf):
     data = {'answers':[
-        {'question': question.id, 'chosen_choice': choices.first().id}
+        {'question': ft_question.id, 'text_answer': 'hello'}
     ]}
     request = api_rf('post', user=None)
     serializer = SubmissionSerializer(data=data, context={'survey':survey, 'request': request})
@@ -420,14 +420,15 @@ def test_create_serializer_rejects_choices_on_free_text_questions(user_factory):
     assert serializer.errors['choices'][0].code == 'free_text_cannot_have_choices'
 
 @pytest.mark.django_db
-def test_survey_create_serializer_rejects_case_insensitive_duplicate_title():
-    Survey.objects.create(title='Customer Feedback')
+def test_survey_create_serializer_rejects_case_insensitive_duplicate_title(user_factory):
+    owner = user_factory('owner')
+    Survey.objects.create(title='Customer Feedback', user=owner)
     data = {
         'title': 'customer feedback', 
         'description': '',
         'questions': [{'title': 'Q1', 'question_type': 'free_text', 'required': True}],
     }
-    serializer = SurveyCreateSerializer(data=data)
+    serializer = SurveyCreateSerializer(data=data, context={'user': owner})
     assert serializer.is_valid() is False
     assert serializer.errors['title'][0].code == 'unique'
     assert str(serializer.errors['title'][0]) == 'Duplicate Survey Name'
@@ -669,6 +670,31 @@ def test_survey_detail_read_serialiezer_uses_prefetched_questions(survey, questi
 
     assert len(data_2['questions']) == 2 # prefetch deleted, now it uses db
 
+@pytest.mark.django_db
+def test_detail_serializer_hides_user_for_owner(survey, question, api_rf, user_factory):
+    owner = user_factory('owner')
+    survey.user = owner
+    survey.save()
+
+    request = api_rf('get', owner)
+    response = SurveyDetailSerializer(survey, context={'request': request})
+
+    assert 'user' not in response.data
+
+@pytest.mark.django_db
+def test_detail_serializer_hides_user_for_owner(survey, question, api_rf, user_factory):
+    owner = user_factory('owner')
+    survey.user = owner
+    admin = user_factory('admin')
+    admin.is_superuser = True
+    admin.save()
+    survey.save()
+
+    request = api_rf('get', admin)
+    response = SurveyDetailSerializer(survey, context={'request': request})
+
+    assert 'user' in response.data
+
 #! ================================================================
 #!                  Representaion Serializers
 #! ================================================================
@@ -685,7 +711,7 @@ def test_question_serializer_include_choices_in_multiple_choice_questions(questi
     assert len(data['choices']) == 4
 
 @pytest.mark.django_db
-def test_question_serializer__does_not_include_choices_in_free_text_questions(ft_question, choices):
+def test_question_serializer_does_not_include_choices_in_free_text_questions(ft_question, choices):
     serializer = QuestionSerializer(ft_question)
     data = serializer.data
 
