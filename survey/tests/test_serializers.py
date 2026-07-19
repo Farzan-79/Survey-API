@@ -682,7 +682,7 @@ def test_detail_serializer_hides_user_for_owner(survey, question, api_rf, user_f
     assert 'user' not in response.data
 
 @pytest.mark.django_db
-def test_detail_serializer_hides_user_for_owner(survey, question, api_rf, user_factory):
+def test_detail_serializer_shows_user_for_superuser(survey, question, api_rf, user_factory):
     owner = user_factory('owner')
     survey.user = owner
     admin = user_factory('admin')

@@ -13,21 +13,24 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import datetime
 import os
+import environ
 
 from corsheaders.defaults import default_headers, default_methods
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+env = environ.Env()
+environ.Env.read_env(BASE_DIR / ".env")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', '6h!-=5wsng9i%-9#5k)5dx4k2d7b$fuq1*gx&(=@2l%y22hjvv')
+SECRET_KEY = env('DJANGO_SECRET_KEY', default='6h!-=5wsng9i%-9#5k)5dx4k2d7b$fuq1*gx&(=@2l%y22hjvv')
+DEBUG = env.bool('DEBUG', default=False)
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
-DEBUG = str(os.environ.get('DEBUG')) == '1'
-
-ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h.strip()]
+#ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h.strip()]
 
 
 # Application definition
@@ -154,9 +157,11 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'drf_standardized_errors.handler.exception_handler',
 }
 
-CORS_ALLOWED_ORIGINS = [
-    o.strip() for o in os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',') if o.strip()
-]
+CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[])
+
+#CORS_ALLOWED_ORIGINS = [
+#    o.strip() for o in os.environ.get('CORS_ALLOWED_ORIGINS', '').split(',') if o.strip()
+#]
 
 CORS_ALLOW_HEADERS = list(default_headers) + [
     "authorization"

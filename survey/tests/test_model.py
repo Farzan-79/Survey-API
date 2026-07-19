@@ -48,7 +48,8 @@ def test_question_duplicate_title_raise_error_in_the_same_survey(survey):
     survey_2 = Survey.objects.create(title='Base 2')
     Question_1 = Question.objects.create(survey=survey, title='How Old Are You?', question_type='free_text')
     Question_2 = Question.objects.create(survey=survey_2, title='How Old Are You?', question_type='free_text')
-    assert Question_1 and Question_2
+    assert Question_1.survey == survey
+    assert Question_2.survey == survey_2
     with pytest.raises(IntegrityError):
         Question_3 = Question.objects.create(survey=survey, title='How Old Are You?', question_type='free_text')
 

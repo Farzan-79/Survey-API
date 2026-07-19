@@ -2,7 +2,7 @@ from django.shortcuts import render
 from rest_framework import generics, mixins, permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .permissions import IsOwnerOrReadOnlyPermission, IsOwnerOrSuperuser
+from .permissions import IsOwnerOrSuperuser
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.db.models import Prefetch, Count
@@ -85,11 +85,6 @@ class SurveyDetailView(generics.RetrieveUpdateDestroyAPIView):
         serializer = self.get_serializer(instance, data=request.data)
         serializer.is_valid(raise_exception=True)
         survey = serializer.save()
-
-        if getattr(instance, '_prefetched_objects_cache', None):
-            #* If 'prefetch_related' has been applied to a queryset, we need to
-            #* forcibly invalidate the prefetch cache on the instance.
-            instance._prefetched_objects_cache = {}
 
         question_count = len(serializer.validated_data.get('questions')) if serializer.validated_data.get('questions') else survey.questions.count()
         if serializer._frozen:

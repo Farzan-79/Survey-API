@@ -88,7 +88,6 @@ class Submission(models.Model):
             )
         ]
 
-
 class Answer(models.Model):
     submission = models.ForeignKey(Submission,
                                  on_delete=models.CASCADE,
@@ -117,4 +116,4 @@ class Answer(models.Model):
         ]
 
     def __str__(self):
-        return f'Answer for \"{self.question.title}\" : {[self.chosen_choice.title if self.chosen_choice else self.text_answer]}'
+        return f'Answer for \"{self.question.title}\" : {self.chosen_choice.title if self.chosen_choice else self.text_answer}'

@@ -109,7 +109,7 @@ class SurveyListSerializer(serializers.ModelSerializer):
         fields = super().get_fields()
         request = self.context.get('request')
         if request is None or not request.user.is_superuser:
-            fields.pop('user')
+            fields.pop('user', None)
         return fields
     
     def get_slug(self, obj):
@@ -499,7 +499,7 @@ class AnswerSerializer(serializers.ModelSerializer):
         }
 
     def __init__(self, instance=None, data=empty, **kwargs):
-        x = super().__init__(instance, data, **kwargs)
+        super().__init__(instance, data, **kwargs)
         survey = self.context.get('survey')
         if survey:
             self.fields['question'].queryset = survey.questions.all()
@@ -607,7 +607,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
                 submission = Submission.objects.create(survey=survey, user=user)
         except IntegrityError:
             raise serializers.ValidationError(
-                    f'{user.username}, You have already answered this Survey.',
+                    f'{user.username if user else 'You'}, You have already answered this Survey.',
                     code= "duplicate_submission"
                 )
 

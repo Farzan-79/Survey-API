@@ -63,6 +63,7 @@ def test_list_view_returns_all_surveys_for_superuser(api_client, user_factory, s
     owner = user_factory('owner')
     admin = user_factory('admin')
     admin.is_superuser = True
+    admin.save()
     url = reverse('survey:list-create')
     Survey.objects.create(user=owner, title='Owner Survey')
     Survey.objects.create(user=admin, title='Admin Survey')
@@ -79,6 +80,7 @@ def test_list_view_hides_user_field_for_non_superuser_user_and_shows_for_superus
     owner = user_factory('owner')
     admin = user_factory('admin')
     admin.is_superuser = True
+    admin.save()
     url = reverse('survey:list-create')
     Survey.objects.create(user=owner, title='Owner Survey')
 
@@ -605,7 +607,7 @@ def test_submission_view_returns_404_for_unknown_slug(user_factory, api_client, 
 @pytest.mark.django_db
 def test_submission_view_post_allows_anonymous_submission(api_client, user_factory, survey, question, ft_question, choices):
     owner = user_factory('owner')
-    survey.owner = owner
+    survey.user = owner
     survey.save()
 
     payload = {
@@ -622,7 +624,7 @@ def test_submission_view_post_allows_anonymous_submission(api_client, user_facto
 @pytest.mark.django_db
 def test_submission_view_post_allows_authenticated_submission(api_client, user_factory, survey, question, ft_question, choices):
     owner = user_factory('owner')
-    survey.owner = owner
+    survey.user = owner
     survey.save()
     submitter = user_factory('submitter')
     api_client.force_authenticate(submitter)
@@ -642,7 +644,7 @@ def test_submission_view_post_allows_authenticated_submission(api_client, user_f
 @pytest.mark.django_db
 def test_submission_view_post_rejects_unanswered_required_question(api_client, user_factory, survey, question, ft_question, choices):
     owner = user_factory('owner')
-    survey.owner = owner
+    survey.user = owner
     survey.save()
     payload = {
         'answers': [
@@ -657,7 +659,7 @@ def test_submission_view_post_rejects_unanswered_required_question(api_client, u
 @pytest.mark.django_db
 def test_submission_view_post_rejects_duplicate_submission_for_the_same_user(api_client, user_factory, survey, question, ft_question, choices):
     owner = user_factory('owner')
-    survey.owner = owner
+    survey.user = owner
     survey.save()
     submitter = user_factory('submitter')
     Submission.objects.create(survey=survey, user=submitter)
@@ -677,7 +679,7 @@ def test_submission_view_post_rejects_duplicate_submission_for_the_same_user(api
 @pytest.mark.django_db
 def test_submission_view_post_returns_404_for_unknown_slug(api_client, user_factory, survey, question, ft_question, choices):
     owner = user_factory('owner')
-    survey.owner = owner
+    survey.user = owner
     survey.save()
     payload = {
         'answers': [
