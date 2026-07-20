@@ -5,22 +5,6 @@ from django.contrib.auth.models import AnonymousUser
 from rest_framework.test import APIClient
 #* These fixtures are accessible by all the other tests. pytest gets them and gives them to whichever test needs them.
 
-@pytest.fixture(autouse=True) #* for faster user creation, with a weak password hashing
-def fast_password_hasher(settings):
-    settings.PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
-
-
-#! ----------------------- MODELS ----------------------------
-
-@pytest.fixture
-def user_factory():
-    User = get_user_model()
-
-    def create_user(username):
-        return User.objects.create_user(username=username, password='PassWord123')
-    
-    return create_user
-
 @pytest.fixture
 def survey(db):
     return Survey.objects.create(title='Base Survey')
@@ -55,23 +39,6 @@ def submission(survey):
 @pytest.fixture
 def answer(question, submission, choices):
     return Answer.objects.create(question=question, submission=submission, chosen_choice=choices.last())
-    
-
-#! ----------------------- REQUEST --------------------------
-
-@pytest.fixture
-def api_rf(rf):
-    def _make_request(method='get', user=None):
-        request = getattr(rf, method.lower())('/fake-url/')
-        request.user = user if user is not None else AnonymousUser()
-        return request
-    return _make_request
-
-@pytest.fixture
-def api_client():
-    return APIClient()
-
-#! ----------------------- SERIALIZERS -----------------------
 
 @pytest.fixture
 def full_survey(survey):
