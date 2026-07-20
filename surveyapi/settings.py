@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     #* Third-Party Packages
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'debug_toolbar',
     'corsheaders',
 
