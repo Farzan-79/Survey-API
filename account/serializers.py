@@ -8,9 +8,8 @@ from rest_framework_simplejwt.exceptions import TokenError
 User = get_user_model()
 
 class UserRegisterSerializer(serializers.ModelSerializer):
-    email = serializers.EmailField(required=True)
-    password = serializers.CharField(write_only= True)
-    confirm_password = serializers.CharField(write_only= True)
+    password = serializers.CharField(write_only= True, required=True)
+    confirm_password = serializers.CharField(write_only= True, required=True)
 
     class Meta:
         model = User
@@ -25,16 +24,6 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         if len(value) < 3:
             raise serializers.ValidationError("Usernames should have at least 3 characters",
                                               code= "username_too_short")
-        if User.objects.filter(username=value).exists():
-            raise serializers.ValidationError("This Username is Taken",
-                                              code= "duplicate_username")
-        return value
-    
-    def validate_email(self, value):
-        validate_email(value)
-        if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError("This Email is Taken",
-                                              code= "duplicate_email")
         return value
     
     def validate_password(self, value):
@@ -57,11 +46,12 @@ class UserProfileSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'username',
+            'email',
             'first_name',
             'last_name',
             'date_joined'
         ]
-        read_only_fields = ['id', 'date_joined', 'username']   
+        read_only_fields = ['id', 'date_joined', 'username', 'email']   
 
 class PasswordChangeSerializer(serializers.Serializer):
     old_password = serializers.CharField(write_only = True)
@@ -96,7 +86,7 @@ class LogOutSerializer(serializers.Serializer):
         try:
             self.token = RefreshToken(value)
         except TokenError:
-            raise serializers.ValidationError("Invalid or Expired Token", code='invalid_token')
+            raise serializers.ValidationError("Invalid or Expired Token", code='invalid_refresh_token')
         return value
     
     def save(self, **kwargs):
