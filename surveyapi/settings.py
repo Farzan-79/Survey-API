@@ -173,7 +173,9 @@ CORS_ALLOW_METHODS = list(default_methods)
 SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ["Bearer"],
     "ACCESS_TOKEN_LIFETIME": datetime.timedelta(minutes=5),
-    "REFRESH_TOKEN_LIFETIME": datetime.timedelta(hours=24)
+    "REFRESH_TOKEN_LIFETIME": datetime.timedelta(hours=24),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
 }
 
 SPECTACULAR_SETTINGS = {
