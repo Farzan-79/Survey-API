@@ -30,8 +30,6 @@ SECRET_KEY = env('DJANGO_SECRET_KEY', default='6h!-=5wsng9i%-9#5k)5dx4k2d7b$fuq1
 DEBUG = env.bool('DEBUG', default=False)
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 
-#ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', '').split(',') if h.strip()]
-
 
 # Application definition
 
@@ -96,10 +94,7 @@ WSGI_APPLICATION = 'surveyapi.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    'default': env.db('DATABASE_URL', default=f'sqlite:///{BASE_DIR / "db.sqlite3"}')
 }
 
 
@@ -198,6 +193,11 @@ SPECTACULAR_SETTINGS = {
     'POSTPROCESSING_HOOKS': ['drf_standardized_errors.openapi_hooks.postprocess_schema_enums'],
 }
 
-INTERNAL_IPS = [
-    "127.0.0.1",
-]
+if DEBUG:
+    INTERNAL_IPS = ["127.0.0.1"]
+    import socket
+    try:
+        hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
+        INTERNAL_IPS += [ip[: ip.rfind(".")] + ".1" for ip in ips]
+    except socket.gaierror:
+        pass
