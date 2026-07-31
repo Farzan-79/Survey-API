@@ -143,6 +143,7 @@ def test_user_profile_exposes_expected_fields(user_factory):
 @pytest.mark.django_db
 def test_user_profile_changes_only_the_writable_fields(user_factory):
     user = user_factory('meow')
+    original_id = user.id
     payload = {
         'id': 4, # should not change
         'username': 'meow2', # should not change
@@ -154,7 +155,8 @@ def test_user_profile_changes_only_the_writable_fields(user_factory):
 
     assert serializer.is_valid()
     user = serializer.save()
-    assert user.id == 1
+
+    assert user.id == original_id
     assert user.username == 'meow'
     assert user.email == 'meow@gmail.com'
     assert user.first_name == 'me'

@@ -253,7 +253,7 @@ def test_create_view_allows_duplicate_title_with_different_users(user_factory, a
 #!                      SurveyDetailView
 #! ================================================================
 
-#? -------------- GET / permissions / methods ---------------
+#? -------------- GET / PUT / permissions / methods ---------------
 
 @pytest.mark.django_db
 def test_detail_view_denies_anonymous_get(api_client, user_factory):
@@ -383,7 +383,11 @@ def test_update_view_owner_put_saves_questions_properly(api_client, user_factory
     survey.refresh_from_db()
     assert list(survey.questions.values_list('title', flat=True)) == ['q11', 'q22', 'q4']
     assert list(survey.questions.values_list('question_type', flat=True)) == ['multiple_choice', 'multiple_choice', 'free_text']
-    assert list(survey.questions.values_list('id', flat=True)) == [1, 2, 4]
+    # assert list(survey.questions.values_list('id', flat=True)) == [1, 2, 4]
+    q_ids = list(survey.questions.values_list('id', flat=True))
+    assert q1.id in q_ids
+    assert q2.id in q_ids
+    assert q3.id not in q_ids
     assert list(survey.questions.get(title='q11').choices.values_list('title', flat=True)) == ['c1q1', 'c2q1']
     assert list(survey.questions.get(title='q22').choices.values_list('title', flat=True)) == ['c1q2', 'c2q2', 'c3q2']
 
@@ -639,7 +643,7 @@ def test_submission_view_post_allows_authenticated_submission(api_client, user_f
 
     assert response.status_code == status.HTTP_201_CREATED
     submission = Submission.objects.filter(survey=survey).first()
-    assert submission.user_id == 2
+    assert submission.user_id == submitter.id
 
 @pytest.mark.django_db
 def test_submission_view_post_rejects_unanswered_required_question(api_client, user_factory, survey, question, ft_question, choices):
