@@ -52,7 +52,7 @@ jobs:
     # Django reads DATABASE_URL from here.
     # ------------------------------------------------------
     env:
-      DATABASE_URL: postgres://surveyapi:surveyapi@db:5432/surveyapi
+      DATABASE_URL: postgres://surveyapi:surveyapi@localhost:5432/surveyapi
 
     steps:
 
