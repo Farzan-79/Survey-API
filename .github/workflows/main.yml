@@ -1,44 +1,85 @@
 name: Django CI
 
+# ----------------------------------------------------------
+# When should this workflow run?
+# ----------------------------------------------------------
 on:
+  # Run every push to the main branch
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    branches: [main]
 
+  # Run every pull request targeting main
+  pull_request:
+    branches: [main]
+
+  # Allow manually starting the workflow from GitHub
   workflow_dispatch:
 
 jobs:
   build:
+
+    # ------------------------------------------------------
+    # Rent a fresh Ubuntu virtual machine from GitHub
+    # ------------------------------------------------------
     runs-on: ubuntu-latest
+
+    # ------------------------------------------------------
+    # Service containers
+    # These are regular Docker containers started beside
+    # the runner and automatically placed on the same network.
+    # ------------------------------------------------------
     services:
       db:
         image: postgres:16-alpine
+
         env:
-          POSTGRES_USER: surveyapi 
+          POSTGRES_USER: surveyapi
           POSTGRES_PASSWORD: surveyapi
           POSTGRES_DB: surveyapi
+
         ports:
           - 5432:5432
+
+        # Wait until PostgreSQL is accepting connections
         options: >-
           --health-cmd="pg_isready -U surveyapi"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=5
+
+    # ------------------------------------------------------
+    # Environment variables available to EVERY step below.
+    # Django reads DATABASE_URL from here.
+    # ------------------------------------------------------
+    env:
+      DATABASE_URL: postgres://surveyapi:surveyapi@db:5432/surveyapi
+
     steps:
-      - name: Checkout Code
+
+      # Download your repository onto the runner.
+      - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Setup Python 3.12-slim
+      # Install Python.
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12
+          python-version: "3.12"
 
-      - name: Install Requirements
-        run: pip install -r requirements.txt
+          # Cache downloaded pip packages.
+          cache: pip
 
-      - name: Run Tests
+      # Install project dependencies.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      # Verify Django can start correctly.
+      - name: Django system check
+        run: python manage.py check
+
+      # Run the test suite.
+      # pytest-django creates the test database automatically.
+      - name: Run tests
         run: pytest
-
-
-
