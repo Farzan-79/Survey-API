@@ -52,17 +52,17 @@ jobs:
     # Django reads DATABASE_URL from here.
     # ------------------------------------------------------
     env:
-      DATABASE_URL: postgres://surveyapi:survewwwyapi@localhost:5432/surveyapi
+      DATABASE_URL: postgres://surveyapi:surveyapi@localhost:5432/surveyapi
 
     steps:
 
       # Download your repository onto the runner.
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       # Install Python.
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
