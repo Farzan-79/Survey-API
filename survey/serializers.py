@@ -6,6 +6,7 @@ from rest_framework.fields import empty
 from .validators import survey_unq_validator, validate_questions_payload
 from .models import Survey, Question, Choice, Answer, Submission
 from django.db.utils import IntegrityError
+from drf_spectacular.utils import extend_schema_field
 
 
 #! ================================================================
@@ -92,14 +93,17 @@ class SurveyListSerializer(serializers.ModelSerializer):
             'url'
         ]
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_user(self, obj):
         return obj.user.username if obj.user else None
 
+    @extend_schema_field(serializers.IntegerField())
     def get_total_responses(self, obj):
         if hasattr(obj, "submission_count"):
             return obj.submission_count
         return obj.submissions.count()
 
+    @extend_schema_field(serializers.IntegerField())
     def get_question_count(self, obj):
         if hasattr(obj, "question_count"):
             return obj.question_count
@@ -112,6 +116,7 @@ class SurveyListSerializer(serializers.ModelSerializer):
             fields.pop('user', None)
         return fields
     
+    @extend_schema_field(serializers.CharField())
     def get_slug(self, obj):
         return obj.slug
 
@@ -170,9 +175,11 @@ class SurveyCreatedMessageSerializer(serializers.ModelSerializer):
             'response_url'
         ]
 
+    @extend_schema_field(serializers.CharField())
     def get_message(self, obj):
         return f'Your Survey has been saved successfuly: {obj.title}'
 
+    @extend_schema_field(serializers.IntegerField())
     def get_question_count(self, obj):
         if 'question_count' in self.context:
             return self.context.get('question_count')
@@ -215,6 +222,7 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
         return fields
         
 
+    @extend_schema_field(serializers.IntegerField())
     def get_total_responses(self, obj):
         if hasattr(obj, "submission_count"):
             return obj.submission_count
@@ -451,11 +459,13 @@ class SurveyUpdateMessageSerializer(serializers.ModelSerializer):
             'response_url',
         ]
     
+    @extend_schema_field(serializers.CharField())
     def get_message(self, obj):
         if self.context.get('frozen'):
             return f'This Survey is Frozen because it has already been answered: {obj.title} \n Only the title and Description were updated'
         return f'Survey Updated Successfully: {obj.title}'
-    
+
+    @extend_schema_field(serializers.IntegerField())
     def get_question_count(self, obj):
         if 'question_count' in self.context:
             return self.context.get('question_count')
@@ -469,6 +479,7 @@ class SurveyDetailWriteSerializer(SurveyDetailSerializer):
 class SurveyDetailReadSerializer(SurveyDetailSerializer):
     questions = serializers.SerializerMethodField()
 
+    @extend_schema_field(QuestionSerializer(many=True))
     def get_questions(self, obj):
         if hasattr(obj, 'prefetched_questions'):
             qs = obj.prefetched_questions
@@ -644,9 +655,11 @@ class ChoiceResaultSerializer(serializers.ModelSerializer):
             return self.context.get('times_answered_question')
         return obj.question.answers.count()
 
+    @extend_schema_field(serializers.IntegerField())
     def get_times_selected(self, obj):
         return self._times_selected(obj)
     
+    @extend_schema_field(serializers.FloatField())
     def get_percentage(self, obj):
         total = self._times_answered_question(obj)
         if total == 0:
@@ -685,6 +698,7 @@ class QuestionResaultSerializer(serializers.ModelSerializer):
             return obj.prefetched_text_answers
         return obj.answers.all()
 
+    @extend_schema_field(ChoiceResaultSerializer(many=True))
     def get_choices(self, obj):
         return ChoiceResaultSerializer(
             self._choices(obj),
@@ -692,12 +706,14 @@ class QuestionResaultSerializer(serializers.ModelSerializer):
             context={'times_answered_question': self._times_answered(obj)}
         ).data
     
+    @extend_schema_field(serializers.ListField(child=serializers.CharField(), allow_null=True))
     def get_text_answers(self, obj):
         if obj.question_type != 'free_text':
             return None
         text_answers = self._text_answers(obj)
         return [A.text_answer for A in text_answers]
 
+    @extend_schema_field(serializers.IntegerField())
     def get_times_answered(self, obj):
         return self._times_answered(obj)
     
@@ -733,12 +749,14 @@ class SurveyResaultSerializer(serializers.ModelSerializer):
             return obj.times_submitted
         return obj.submissions.count()
 
+    @extend_schema_field(QuestionResaultSerializer(many=True))
     def get_questions(self, obj):
         return QuestionResaultSerializer(
             self._questions(obj),
             many=True
         ).data
 
+    @extend_schema_field(serializers.IntegerField())
     def get_total_responses(self, obj):
         return self._total_responses(obj)      
 

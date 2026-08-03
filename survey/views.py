@@ -6,6 +6,8 @@ from .permissions import IsOwnerOrSuperuser
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.db.models import Prefetch, Count
+from drf_spectacular.utils import extend_schema, extend_schema_view
+
 
 from .models import (
     Survey,
@@ -96,6 +98,19 @@ class SurveyDetailView(generics.RetrieveUpdateDestroyAPIView):
                                                                              'question_count': question_count})
         return Response(response_serializer.data, status= status.HTTP_200_OK)
 
+@extend_schema_view(
+    get= extend_schema(
+        summary = "Get survey form for responding",
+        description = "Public endpoint. Returns the survey's questions so a client can render a submission form.",
+        responses = SurveyDetailSerializer
+    ),
+    post= extend_schema(
+        summary = "Submit a response to a survey",
+        description = "Public endpoint. Accepts answers for each question and creates a Submission.",
+        request= SubmissionSerializer,
+        responses= {201: SubmissionSerializer}
+    )
+)
 class SubmissionView(APIView):
     permission_classes = [permissions.AllowAny]
 
@@ -115,6 +130,13 @@ class SubmissionView(APIView):
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
+@extend_schema_view(
+    get=extend_schema(
+        summary="Get aggregated survey results",
+        description="Owner/superuser only. Returns per-question answer counts and percentages.",
+        responses=SurveyResaultSerializer,
+    ),
+)
 class ResaultsView(APIView):
     permission_classes = [IsOwnerOrSuperuser]
     def get(self, request, slug):

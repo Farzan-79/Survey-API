@@ -94,4 +94,6 @@ class LogOutSerializer(serializers.Serializer):
     def save(self, **kwargs):
         self.token.blacklist()
 
-    
+#! documentation-only artifact. only swagger uses it
+class MessageResponseSerializer(serializers.Serializer):
+    message = serializers.CharField()
