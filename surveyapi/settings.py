@@ -29,6 +29,7 @@ environ.Env.read_env(BASE_DIR / ".env")
 SECRET_KEY = env('DJANGO_SECRET_KEY', default='6h!-=5wsng9i%-9#5k)5dx4k2d7b$fuq1*gx&(=@2l%y22hjvv')
 DEBUG = env.bool('DEBUG', default=False)
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
+GOOGLE_API_KEY = env('GOOGLE_API_KEY')
 
 
 # Application definition
