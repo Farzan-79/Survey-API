@@ -2,13 +2,14 @@ from django.shortcuts import render
 from rest_framework import generics, mixins, permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .permissions import IsOwnerOrSuperuser
+from survey.permissions import IsOwnerOrSuperuser
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.db.models import Prefetch, Count
 from drf_spectacular.utils import extend_schema, extend_schema_view
 
-from .services.summary import summarize_answers
+from survey.services.summary import summarize_answers
+from survey.services.exceptions import AIServiceUnavailable
 
 from .models import (
     Survey,
@@ -163,7 +164,7 @@ class SummarizeAnswers(APIView):
         question = get_object_or_404(Question, id=id)
 
         if question.question_type != "free_text":
-            return Response({"error": "Question is not Free Text"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"question_type_error": "Question is not Free Text"}, status=status.HTTP_400_BAD_REQUEST)
         
         question_title = question.title
         answers = list(question.answers.values_list('text_answer', flat=True))
@@ -172,8 +173,19 @@ class SummarizeAnswers(APIView):
             return Response(
                 {"summary": "There are no answers to summarize."},
                 status=status.HTTP_200_OK)
+        
+        try:
+            response = summarize_answers(question_title, clean_answers)
+        except AIServiceUnavailable:
+            return Response(
+                {"detail": (
+                "AI service is currently unavailable. "
+                "Please try again later."
+            )},
+            status= status.HTTP_503_SERVICE_UNAVAILABLE
+            )
 
-        response = summarize_answers(question_title, clean_answers)
+
         return Response({"summary":response}, status=status.HTTP_200_OK)
 
 
