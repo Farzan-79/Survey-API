@@ -8,6 +8,7 @@ from django.db import transaction
 from django.db.models import Prefetch, Count
 from drf_spectacular.utils import extend_schema, extend_schema_view
 
+from .services.summary import summarize_answers
 
 from .models import (
     Survey,
@@ -156,8 +157,24 @@ class ResaultsView(APIView):
         serializer = SurveyResaultSerializer(survey, context={'request': request})
         return Response(serializer.data)
 
+class SummarizeAnswers(APIView):
+    permission_classes = [IsOwnerOrSuperuser]
+    def post(self, request, id):
+        question = get_object_or_404(Question, id=id)
+
+        if question.question_type != "free_text":
+            return Response({"error": "Question is not Free Text"}, status=status.HTTP_400_BAD_REQUEST)
         
-    
+        question_title = question.title
+        answers = list(question.answers.values_list('text_answer', flat=True))
+        clean_answers = [a.strip() for a in answers if a.strip()]
+        if not clean_answers:
+            return Response(
+                {"summary": "There are no answers to summarize."},
+                status=status.HTTP_200_OK)
+
+        response = summarize_answers(question_title, clean_answers)
+        return Response({"summary":response}, status=status.HTTP_200_OK)
 
 
 

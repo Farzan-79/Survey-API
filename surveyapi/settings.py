@@ -30,6 +30,7 @@ SECRET_KEY = env('DJANGO_SECRET_KEY', default='6h!-=5wsng9i%-9#5k)5dx4k2d7b$fuq1
 DEBUG = env.bool('DEBUG', default=False)
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=[])
 GOOGLE_API_KEY = env('GOOGLE_API_KEY')
+GEMINI_MODEL = env('GEMINI_MODEL', default="gemini-3.1-flash-lite")
 
 
 # Application definition
