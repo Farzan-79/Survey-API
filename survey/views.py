@@ -26,7 +26,9 @@ from .serializers import (
     SurveyUpdateMessageSerializer,
     SurveyCreatedMessageSerializer,
     SubmissionSerializer,
-    SurveyResaultSerializer)
+    SurveyResaultSerializer,
+    SummaryResponseSerializer,
+    ErrorResponseSerializer,)
 # Create your views here.
 # i will send you my views and serializers final versions. first, i need you to tell me why did i use a different approach for each view. i mean what is the reason it would be better for something like resaults view to be APIView and i handle all those quesrysets and for others like the detail view
 
@@ -158,13 +160,25 @@ class ResaultsView(APIView):
         serializer = SurveyResaultSerializer(survey, context={'request': request})
         return Response(serializer.data)
 
+@extend_schema_view(
+    post=extend_schema(
+        summary="Summerizes text answers for given question",
+        description="the question must be a free text with submitted answers, and only the owner can send the request",
+        responses={
+            200: SummaryResponseSerializer,
+            400: ErrorResponseSerializer,
+            503: ErrorResponseSerializer,
+        }
+    )
+)
 class SummarizeAnswers(APIView):
     permission_classes = [IsOwnerOrSuperuser]
     def post(self, request, id):
         question = get_object_or_404(Question, id=id)
+        self.check_object_permissions(request, question.survey)
 
         if question.question_type != "free_text":
-            return Response({"question_type_error": "Question is not Free Text"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Question is not Free Text"}, status=status.HTTP_400_BAD_REQUEST)
         
         question_title = question.title
         answers = list(question.answers.values_list('text_answer', flat=True))
@@ -187,6 +201,3 @@ class SummarizeAnswers(APIView):
 
 
         return Response({"summary":response}, status=status.HTTP_200_OK)
-
-
-

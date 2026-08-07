@@ -760,13 +760,13 @@ class SurveyResaultSerializer(serializers.ModelSerializer):
     def get_total_responses(self, obj):
         return self._total_responses(obj)      
 
+#! ================================================================
+#!              SUMMARY SERIALZERS (only for schema)
+#! ================================================================
 
+class SummaryResponseSerializer(serializers.Serializer):
+    summary = serializers.CharField()
 
+class ErrorResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
         
-
-
-
-
-
-
-

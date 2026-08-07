@@ -1,7 +1,9 @@
 import pytest
 from rest_framework import status
 from django.urls import reverse
-from survey.models import Survey, Question, Choice, Submission
+from survey.models import Survey, Question, Choice, Submission, Answer
+from unittest.mock import patch
+from survey.services.exceptions import AIServiceUnavailable
 
 #! ================================================================
 #!                    SurveyListCreateView
@@ -846,5 +848,147 @@ def test_resaults_view_shows_the_whole_data_appropriately(api_client, user_facto
     assert choice_by_title_3['A']['percentage'] == 0 # making sure 0/0 does not happen for percentage
     assert choice_by_title_3['B']['times_selected'] == 0
     assert choice_by_title_3['B']['percentage'] == 0
+
+#! ================================================================
+#!                      SummarizeAnswers
+#! ================================================================
+
+#? -------------- authentication / permissions ------------------
+
+@pytest.mark.django_db
+def test_summary_view_rejects_anonymous_user_post(survey, api_client, ft_question):
+    url = reverse('survey:summary', kwargs={'id': ft_question.id})
+    response = api_client.post(url)
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+@pytest.mark.django_db
+def test_summary_view_rejects_non_owner_post(survey, ft_question, api_client, user_factory):
+    owner = user_factory('owner')
+    stranger = user_factory('stranger')
+    survey.user = owner
+    survey.save()
+
+    url = reverse('survey:summary', kwargs={'id': ft_question.id})
+    api_client.force_authenticate(stranger)
+    response = api_client.post(url)
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+@pytest.mark.django_db
+def test_summary_view_allows_owner_post(survey, ft_question, api_client, user_factory):
+    owner = user_factory('owner')
+    survey.user = owner
+    survey.save()
+
+    url = reverse('survey:summary', kwargs={'id': ft_question.id})
+    api_client.force_authenticate(owner)
+    response = api_client.post(url)
+
+    assert response.status_code == status.HTTP_200_OK
+
+@pytest.mark.django_db
+def test_summary_view_allows_superuser_post(survey, ft_question, api_client, user_factory):
+    admin = user_factory('admin')
+    admin.is_superuser = True
+    admin.save()
+    owner = user_factory('owner')
+    survey.user = owner
+    survey.save()
+
+    url = reverse('survey:summary', kwargs={'id': ft_question.id})
+    api_client.force_authenticate(admin)
+    response = api_client.post(url)
+
+    assert response.status_code == status.HTTP_200_OK
+
+@pytest.mark.django_db
+def test_summary_view_denies_get(survey, ft_question, api_client, user_factory):
+    url = reverse('survey:summary', kwargs={'id': ft_question.id})
+    response = api_client.get(url)
+
+    assert response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
+
+#? ------------------------- question lookup --------------------------
+
+@pytest.mark.django_db
+def test_summarize_view_returns_404_for_unknown_question_id(api_client, user_factory):
+    owner = user_factory('owner')
+    # api_client.force_authenticate(owner) # no need for auth when the object wont be found
+    url = reverse('survey:summary', kwargs={'id': 999999})
+    response = api_client.post(url)
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+def test_summarize_view_rejects_non_free_text_questions(survey, question, choices, user_factory, api_client):
+    owner = user_factory('owner')
+    survey.user = owner
+    survey.save()
+
+    api_client.force_authenticate(owner)
+    url = reverse('survey:summary', kwargs={'id': question.id})
+    response = api_client.post(url)
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+@pytest.mark.django_db
+def test_summarize_view_returns_default_message_when_no_answers(api_client, user_factory, survey, ft_question):
+    owner = user_factory('owner')
+    survey.user = owner
+    survey.save()
+
+    api_client.force_authenticate(owner)
+    url = reverse('survey:summary', kwargs={'id': ft_question.id})
+
+    with patch('survey.views.summarize_answers') as mock_summarize:
+        response = api_client.post(url)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data['summary'] == "There are no answers to summarize."
+    mock_summarize.assert_not_called()
+
+#? -------------- success path / cleaning answers ---------------
+
+@pytest.mark.django_db
+def test_summarize_view_calls_summarize_answers_with_cleaned_text(api_client, user_factory, survey, ft_question, submission):
+    owner = user_factory('owner')
+    survey.user = owner
+    survey.save()
+
+    Answer.objects.create(question=ft_question, submission=submission, text_answer='  good  ')
+    submission_2 = Submission.objects.create(survey=survey)
+    Answer.objects.create(question=ft_question, submission=submission_2, text_answer='   ')  # blank -> filtered out
+    submission_3 = Submission.objects.create(survey=survey)
+    Answer.objects.create(question=ft_question, submission=submission_3, text_answer=' not bad  ')  # blank -> filtered out
+
+    api_client.force_authenticate(owner)
+    url = reverse('survey:summary', kwargs={'id': ft_question.id})
+
+    with patch('survey.views.summarize_answers', return_value='final summary') as mock_summarize:
+        response = api_client.post(url)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data['summary'] == 'final summary'
+    mock_summarize.assert_called_once_with(ft_question.title, ['good', 'not bad'])
+
+#? -------------- AI service unavailable ---------------
+
+@pytest.mark.django_db
+def test_summarize_view_returns_503_when_ai_service_unavailable(api_client, user_factory, survey, ft_question, submission):
+    owner = user_factory('owner')
+    survey.user = owner
+    survey.save()
+    Answer.objects.create(question=ft_question, submission=submission, text_answer='good')
+
+    api_client.force_authenticate(owner)
+    url = reverse('survey:summary', kwargs={'id': ft_question.id})
+
+    with patch('survey.views.summarize_answers', side_effect=AIServiceUnavailable('down')):
+        response = api_client.post(url)
+
+    assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    assert 'detail' in response.data
+
+
 
 

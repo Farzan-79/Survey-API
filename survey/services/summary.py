@@ -35,4 +35,4 @@ def summarize_answers(question: str, answer_list: list[str], model: str = settin
 
     prompt = build_prompt(question, answers)
 
-    return generate_summary(prompt)
+    return generate_summary(prompt, model)
