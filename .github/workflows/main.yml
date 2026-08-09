@@ -53,6 +53,8 @@ jobs:
     # ------------------------------------------------------
     env:
       DATABASE_URL: postgres://surveyapi:surveyapi@localhost:5432/surveyapi
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
 
     steps:
 
