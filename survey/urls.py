@@ -3,7 +3,7 @@ from .views import (
     SurveyListCreateView,
     SurveyDetailView,
     SubmissionView,
-    ResaultsView,
+    ResultsView,
     SummarizeAnswers
 )
 
@@ -12,6 +12,6 @@ urlpatterns = [
     path("", SurveyListCreateView.as_view(), name='list-create'),
     path("<slug:slug>/", SurveyDetailView.as_view(), name='detail'),
     path('<slug:slug>/response/', SubmissionView.as_view(), name='response'),
-    path('<slug:slug>/resaults/', ResaultsView.as_view(), name='resaults'),
+    path('<slug:slug>/results/', ResultsView.as_view(), name='results'),
     path('questions/<int:id>/summarize/', SummarizeAnswers.as_view(), name='summary')
 ]

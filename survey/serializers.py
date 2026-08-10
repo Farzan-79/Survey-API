@@ -192,7 +192,7 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)
     title = serializers.CharField()
     response_url = serializers.HyperlinkedIdentityField(view_name= 'survey:response', lookup_field='slug')
-    resaults_url = serializers.HyperlinkedIdentityField(view_name= 'survey:resaults', lookup_field='slug')
+    results_url = serializers.HyperlinkedIdentityField(view_name= 'survey:results', lookup_field='slug')
     total_responses = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
@@ -205,7 +205,7 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
             'questions',
             'total_responses',
             'response_url',
-            'resaults_url'
+            'results_url'
         ]
 
     def __init__(self, *args, **kwargs):
@@ -629,10 +629,10 @@ class SubmissionSerializer(serializers.ModelSerializer):
         return submission
 
 #! ================================================================
-#!                       RESAULT SERIALZERS
+#!                       RESULT SERIALZERS
 #! ================================================================
 
-class ChoiceResaultSerializer(serializers.ModelSerializer):
+class ChoiceResultSerializer(serializers.ModelSerializer):
     times_selected = serializers.SerializerMethodField()
     percentage = serializers.SerializerMethodField()
 
@@ -666,7 +666,7 @@ class ChoiceResaultSerializer(serializers.ModelSerializer):
             return 0
         return round((self._times_selected(obj) / total) * 100, 2)
 
-class QuestionResaultSerializer(serializers.ModelSerializer):
+class QuestionResultSerializer(serializers.ModelSerializer):
     choices = serializers.SerializerMethodField()
     times_answered = serializers.SerializerMethodField(read_only=True)
     text_answers = serializers.SerializerMethodField() 
@@ -698,9 +698,9 @@ class QuestionResaultSerializer(serializers.ModelSerializer):
             return obj.prefetched_text_answers
         return obj.answers.all()
 
-    @extend_schema_field(ChoiceResaultSerializer(many=True))
+    @extend_schema_field(ChoiceResultSerializer(many=True))
     def get_choices(self, obj):
-        return ChoiceResaultSerializer(
+        return ChoiceResultSerializer(
             self._choices(obj),
             many=True,
             context={'times_answered_question': self._times_answered(obj)}
@@ -725,7 +725,7 @@ class QuestionResaultSerializer(serializers.ModelSerializer):
             data.pop('choices', None)
         return data
     
-class SurveyResaultSerializer(serializers.ModelSerializer):
+class SurveyResultSerializer(serializers.ModelSerializer):
     questions = serializers.SerializerMethodField()
     total_responses = serializers.SerializerMethodField(read_only=True)
 
@@ -749,9 +749,9 @@ class SurveyResaultSerializer(serializers.ModelSerializer):
             return obj.times_submitted
         return obj.submissions.count()
 
-    @extend_schema_field(QuestionResaultSerializer(many=True))
+    @extend_schema_field(QuestionResultSerializer(many=True))
     def get_questions(self, obj):
-        return QuestionResaultSerializer(
+        return QuestionResultSerializer(
             self._questions(obj),
             many=True
         ).data

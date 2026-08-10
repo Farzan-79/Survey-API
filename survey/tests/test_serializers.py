@@ -8,9 +8,9 @@ from survey.serializers import (
     SurveyCreateSerializer,
     SurveyDetailSerializer,
     QuestionSerializer,
-    SurveyResaultSerializer,
-    QuestionResaultSerializer,
-    ChoiceResaultSerializer,
+    SurveyResultSerializer,
+    QuestionResultSerializer,
+    ChoiceResultSerializer,
     SurveyListSerializer,
     SurveyDetailReadSerializer,
     SurveyUpdateMessageSerializer,
@@ -718,11 +718,11 @@ def test_question_serializer_does_not_include_choices_in_free_text_questions(ft_
     assert data['question_type'] == 'free_text'
     assert 'choices' not in data
 
-#? -------------- resault serializers --------------------
+#? -------------- result serializers --------------------
 
 @pytest.mark.django_db
-def test_question_resault_serializer_include_choices_in_multiple_choice_questions(question, choices):
-    serializer = QuestionResaultSerializer(question)
+def test_question_result_serializer_include_choices_in_multiple_choice_questions(question, choices):
+    serializer = QuestionResultSerializer(question)
     data = serializer.data
 
     assert data['question_type'] == 'multiple_choice'
@@ -731,8 +731,8 @@ def test_question_resault_serializer_include_choices_in_multiple_choice_question
     assert len(data['choices']) == 4
 
 @pytest.mark.django_db
-def test_question_resault_serializer_does_not_include_choices_in_free_text_questions(ft_question, choices):
-    serializer = QuestionResaultSerializer(ft_question)
+def test_question_result_serializer_does_not_include_choices_in_free_text_questions(ft_question, choices):
+    serializer = QuestionResultSerializer(ft_question)
     data = serializer.data
 
     assert data['question_type'] == 'free_text'
@@ -747,7 +747,7 @@ def test_choice_result_serializer_calculates_percentage(survey, question, choice
         'times_answered_question': 10
     }
 
-    data = ChoiceResaultSerializer(choice, context=context).data
+    data = ChoiceResultSerializer(choice, context=context).data
 
     assert data['percentage'] == 40
 
@@ -755,7 +755,7 @@ def test_choice_result_serializer_calculates_percentage(survey, question, choice
 def test_choice_result_serializer_calculates_percentage_when_there_is_no_answer(survey, question, choices):
     choice = choices.first()
 
-    data = ChoiceResaultSerializer(choice).data
+    data = ChoiceResultSerializer(choice).data
 
     assert data['percentage'] == 0
 
@@ -763,18 +763,18 @@ def test_choice_result_serializer_calculates_percentage_when_there_is_no_answer(
 def test_choice_result_serializer_shows_text_answers_in_free_text_question(survey, ft_question):
     submission = Submission.objects.create(survey=survey)
     answer = Answer.objects.create(question=ft_question, text_answer='hello', submission=submission)
-    serializer = QuestionResaultSerializer(ft_question)
+    serializer = QuestionResultSerializer(ft_question)
     data = serializer.data
 
     assert data['text_answers'] == ['hello']
 
 @pytest.mark.django_db
-def test_survey_resault_serializer_shows_all_questions_and_counts(survey, question, ft_question, choices):
+def test_survey_result_serializer_shows_all_questions_and_counts(survey, question, ft_question, choices):
     submission = Submission.objects.create(survey=survey)
     answer_1 = Answer.objects.create(question= question, submission= submission, chosen_choice= choices.first())
     answer_2 = Answer.objects.create(question= ft_question, submission= submission, text_answer='hello')
 
-    data = SurveyResaultSerializer(survey).data
+    data = SurveyResultSerializer(survey).data
     questions = data['questions']
 
     assert len(questions) == 2

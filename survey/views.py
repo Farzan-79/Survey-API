@@ -26,11 +26,11 @@ from .serializers import (
     SurveyUpdateMessageSerializer,
     SurveyCreatedMessageSerializer,
     SubmissionSerializer,
-    SurveyResaultSerializer,
+    SurveyResultSerializer,
     SummaryResponseSerializer,
     ErrorResponseSerializer,)
 # Create your views here.
-# i will send you my views and serializers final versions. first, i need you to tell me why did i use a different approach for each view. i mean what is the reason it would be better for something like resaults view to be APIView and i handle all those quesrysets and for others like the detail view
+# i will send you my views and serializers final versions. first, i need you to tell me why did i use a different approach for each view. i mean what is the reason it would be better for something like results view to be APIView and i handle all those quesrysets and for others like the detail view
 
 
 class SurveyListCreateView(generics.ListCreateAPIView):
@@ -138,10 +138,10 @@ class SubmissionView(APIView):
     get=extend_schema(
         summary="Get aggregated survey results",
         description="Owner/superuser only. Returns per-question answer counts and percentages.",
-        responses=SurveyResaultSerializer,
+        responses=SurveyResultSerializer,
     ),
 )
-class ResaultsView(APIView):
+class ResultsView(APIView):
     permission_classes = [IsOwnerOrSuperuser]
     def get(self, request, slug):
         text_answer_qs = Answer.objects.filter(text_answer__isnull=False).only('text_answer', 'question_id')
@@ -157,7 +157,7 @@ class ResaultsView(APIView):
             , slug=slug \
         )
         self.check_object_permissions(request, survey)
-        serializer = SurveyResaultSerializer(survey, context={'request': request})
+        serializer = SurveyResultSerializer(survey, context={'request': request})
         return Response(serializer.data)
 
 @extend_schema_view(

@@ -699,16 +699,16 @@ def test_submission_view_post_returns_404_for_unknown_slug(api_client, user_fact
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 #! ================================================================
-#!                       ResaultsView
+#!                       ResultsView
 #! ================================================================
 
 @pytest.mark.django_db
-def test_resaults_view_rejects_any_method_but_get(api_client, survey, user_factory):
+def test_results_view_rejects_any_method_but_get(api_client, survey, user_factory):
     owner = user_factory('owner')
     survey.user = owner
     survey.save()
 
-    url = reverse('survey:resaults', kwargs={'slug': survey.slug})
+    url = reverse('survey:results', kwargs={'slug': survey.slug})
     response = api_client.post(url, {}, 'json')
     response1 = api_client.put(url, {}, 'json')
     response2 = api_client.delete(url)
@@ -718,43 +718,43 @@ def test_resaults_view_rejects_any_method_but_get(api_client, survey, user_facto
     assert response2.status_code == status.HTTP_405_METHOD_NOT_ALLOWED
 
 @pytest.mark.django_db
-def test_resaults_view_rejects_anonymous_user(api_client, survey, user_factory):
+def test_results_view_rejects_anonymous_user(api_client, survey, user_factory):
     owner = user_factory('owner')
     survey.user = owner
     survey.save()
 
-    url = reverse('survey:resaults', kwargs={'slug': survey.slug})
+    url = reverse('survey:results', kwargs={'slug': survey.slug})
     response = api_client.get(url)
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 @pytest.mark.django_db
-def test_resaults_view_rejects_non_owner_user(api_client, survey, user_factory):
+def test_results_view_rejects_non_owner_user(api_client, survey, user_factory):
     owner = user_factory('owner')
     survey.user = owner
     survey.save()
     stranger = user_factory('stranger')
     api_client.force_authenticate(stranger)
 
-    url = reverse('survey:resaults', kwargs={'slug': survey.slug})
+    url = reverse('survey:results', kwargs={'slug': survey.slug})
     response = api_client.get(url)
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
 
 @pytest.mark.django_db
-def test_resaults_view_allows_owner(api_client, survey, user_factory):
+def test_results_view_allows_owner(api_client, survey, user_factory):
     owner = user_factory('owner')
     survey.user = owner
     survey.save()
     api_client.force_authenticate(owner)
 
-    url = reverse('survey:resaults', kwargs={'slug': survey.slug})
+    url = reverse('survey:results', kwargs={'slug': survey.slug})
     response = api_client.get(url)
 
     assert response.status_code == status.HTTP_200_OK
 
 @pytest.mark.django_db
-def test_resaults_view_allows_superuser(api_client, survey, user_factory):
+def test_results_view_allows_superuser(api_client, survey, user_factory):
     owner = user_factory('owner')
     survey.user = owner
     survey.save()
@@ -763,18 +763,18 @@ def test_resaults_view_allows_superuser(api_client, survey, user_factory):
     stranger.save()
     api_client.force_authenticate(stranger)
 
-    url = reverse('survey:resaults', kwargs={'slug': survey.slug})
+    url = reverse('survey:results', kwargs={'slug': survey.slug})
     response = api_client.get(url)
 
     assert response.status_code == status.HTTP_200_OK
 
 @pytest.mark.django_db
-def test_resaults_view_return_404_on_wrong_slug(api_client, survey, user_factory):
+def test_results_view_return_404_on_wrong_slug(api_client, survey, user_factory):
     owner = user_factory('owner')
     survey.user = owner
     survey.save()
 
-    url = reverse('survey:resaults', kwargs={'slug': 'meoooooow'})
+    url = reverse('survey:results', kwargs={'slug': 'meoooooow'})
     response = api_client.get(url)
 
     # get_object_or_404() runs before self.check_object_permissions() in the
@@ -782,7 +782,7 @@ def test_resaults_view_return_404_on_wrong_slug(api_client, survey, user_factory
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 @pytest.mark.django_db
-def test_resaults_view_shows_the_whole_data_appropriately(api_client, user_factory, survey, question, ft_question, choices):
+def test_results_view_shows_the_whole_data_appropriately(api_client, user_factory, survey, question, ft_question, choices):
     owner = user_factory('owner')
     voter_1 = user_factory('voter_1')
     voter_2 = user_factory('voter_2')
@@ -814,9 +814,9 @@ def test_resaults_view_shows_the_whole_data_appropriately(api_client, user_facto
     api_client.post(response_url, payload, 'json')
     
 
-    resaults_url = reverse('survey:resaults', kwargs={'slug': survey.slug})
+    results_url = reverse('survey:results', kwargs={'slug': survey.slug})
     api_client.force_authenticate(owner)
-    response = api_client.get(resaults_url)
+    response = api_client.get(results_url)
 
     assert response.status_code == status.HTTP_200_OK
     assert response.data['total_responses'] == 4
