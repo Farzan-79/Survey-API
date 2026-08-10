@@ -10,6 +10,8 @@ class Survey(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     slug = models.SlugField(unique=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    is_public = models.BooleanField(default=True)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
 

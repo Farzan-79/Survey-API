@@ -76,10 +76,13 @@ class QuestionCreateSerializer(WritableNestedModelSerializer):
 class SurveyListSerializer(serializers.ModelSerializer):
     question_count = serializers.SerializerMethodField(read_only=True)
     url = serializers.HyperlinkedIdentityField(view_name='survey:detail', lookup_field='slug')
+    response_url = serializers.HyperlinkedIdentityField(view_name='survey:response', lookup_field='slug')
     id = serializers.IntegerField(read_only=True)
     total_responses = serializers.SerializerMethodField(read_only=True)
     user = serializers.SerializerMethodField(read_only= True)
     slug = serializers.SerializerMethodField(read_only= True)
+    is_public = serializers.BooleanField(read_only=True)
+    is_active = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Survey
@@ -90,7 +93,10 @@ class SurveyListSerializer(serializers.ModelSerializer):
             'question_count',
             'total_responses',
             'slug',
-            'url'
+            'url',
+            'response_url',
+            'is_public',
+            'is_active',
         ]
 
     @extend_schema_field(serializers.CharField(allow_null=True))
@@ -112,6 +118,13 @@ class SurveyListSerializer(serializers.ModelSerializer):
     def get_fields(self):
         fields = super().get_fields()
         request = self.context.get('request')
+
+        if self.context.get('pub'):
+            fields.pop('url')
+            fields.pop('is_active')
+            fields.pop('is_public')
+            return fields
+
         if request is None or not request.user.is_superuser:
             fields.pop('user', None)
         return fields
@@ -130,6 +143,8 @@ class SurveyCreateSerializer(WritableNestedModelSerializer):
             'title',
             'description',
             'questions',
+            'is_public',
+            'is_active',
         ]
     
     def __init__(self, *args, **kwargs):
@@ -205,7 +220,9 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
             'questions',
             'total_responses',
             'response_url',
-            'results_url'
+            'results_url',
+            'is_public',
+            'is_active',
         ]
 
     def __init__(self, *args, **kwargs):
@@ -462,7 +479,7 @@ class SurveyUpdateMessageSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.CharField())
     def get_message(self, obj):
         if self.context.get('frozen'):
-            return f'This Survey is Frozen because it has already been answered: {obj.title} \n Only the title and Description were updated'
+            return 'This Survey is Frozen because it has already been answered \n The Questions remain unchanged but other fields are updated'
         return f'Survey Updated Successfully: {obj.title}'
 
     @extend_schema_field(serializers.IntegerField())

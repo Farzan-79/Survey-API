@@ -29,8 +29,6 @@ from .serializers import (
     SurveyResultSerializer,
     SummaryResponseSerializer,
     ErrorResponseSerializer,)
-# Create your views here.
-# i will send you my views and serializers final versions. first, i need you to tell me why did i use a different approach for each view. i mean what is the reason it would be better for something like results view to be APIView and i handle all those quesrysets and for others like the detail view
 
 
 class SurveyListCreateView(generics.ListCreateAPIView):
@@ -116,7 +114,13 @@ class SurveyDetailView(generics.RetrieveUpdateDestroyAPIView):
     )
 )
 class SubmissionView(APIView):
-    permission_classes = [permissions.AllowAny]
+
+    def get_permissions(self):
+        slug = self.kwargs['slug']
+        survey = get_object_or_404(Survey, slug=slug)
+        if not survey.is_public:
+            return [permissions.IsAuthenticated()]
+        return [permissions.AllowAny()]
 
     def get(self, request, slug):
         survey = get_object_or_404(Survey.objects \
@@ -129,6 +133,11 @@ class SubmissionView(APIView):
     def post(self, request, slug):
         payload = request.data
         survey = get_object_or_404(Survey, slug=slug)
+        if not survey.is_active:
+            return Response(
+                {"detail": "This survey is closed and no longer accepting responses."},
+                status=status.HTTP_400_BAD_REQUEST,
+        )
         serializer = SubmissionSerializer(data=payload, context={'survey': survey, 'request': request})
         serializer.is_valid(raise_exception=True)
         serializer.save()
@@ -171,7 +180,7 @@ class ResultsView(APIView):
         }
     )
 )
-class SummarizeAnswers(APIView):
+class SummarizeAnswersView(APIView):
     permission_classes = [IsOwnerOrSuperuser]
     def post(self, request, id):
         question = get_object_or_404(Question, id=id)
@@ -201,3 +210,26 @@ class SummarizeAnswers(APIView):
 
 
         return Response({"summary":response}, status=status.HTTP_200_OK)
+
+class PublicListView(generics.ListAPIView):
+    queryset = (
+        Survey.objects
+        .filter(
+            is_public=True,
+            is_active=True,
+        )
+        .select_related("user")
+        .annotate(
+            question_count=Count("questions", distinct=True),
+            submission_count=Count("submissions", distinct=True),
+        )
+        .order_by("-created")[:6]
+    )
+
+    serializer_class = SurveyListSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True, context={'pub': True, 'request': request, 'view':self})
+        return Response(serializer.data, status=status.HTTP_200_OK)
