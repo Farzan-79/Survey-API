@@ -825,7 +825,7 @@ def test_update_message_serializer_returns_right_message(survey, question, ft_qu
 
     data_2 = SurveyUpdateMessageSerializer(survey, context={'request': request, 'frozen': True}).data
 
-    assert data_2['message'] == f'This Survey is Frozen because it has already been answered: {survey.title} \n Only the title and Description were updated'
+    assert data_2['message'] == 'This Survey is Frozen because it has already been answered \n The Questions remain unchanged but other fields are updated'
     assert data_2['question_count'] == 2
 
 @pytest.mark.django_db

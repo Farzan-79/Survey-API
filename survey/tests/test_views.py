@@ -849,6 +849,26 @@ def test_results_view_shows_the_whole_data_appropriately(api_client, user_factor
     assert choice_by_title_3['B']['times_selected'] == 0
     assert choice_by_title_3['B']['percentage'] == 0
 
+
+#! ================================================================
+#!                      SummarizeAnswers
+#! ================================================================
+
+@pytest.mark.django_db
+def test_public_view_shows_only_public_surveys(api_client, survey):
+    survey2 = Survey.objects.create(title='meow', is_public=False)
+    survey3 = Survey.objects.create(title='meow2', is_active=False)
+    survey4 = Survey.objects.create(title='meow3')
+    survey5 = Survey.objects.create(title='meow4', is_active=False, is_public=False)
+
+
+    url = reverse('survey:public-list')
+    response = api_client.get(url)
+
+    assert len(response.data) == 2
+
+
+
 #! ================================================================
 #!                      SummarizeAnswers
 #! ================================================================
