@@ -562,10 +562,10 @@ def test_delete_view_allows_superuser_delete(api_client, user_factory):
 #!                      SubmissionView
 #! ================================================================
 
-#? ---------------------- GET ------------------------
+#? -------------------- Permission ------------------------
 
 @pytest.mark.django_db
-def test_submission_view_get_is_public(user_factory, api_client):
+def test_submission_view_get_is_public_for_public_surveys(user_factory, api_client):
     owner = user_factory('owner')
     survey = Survey.objects.create(title='Survey', user=owner)
     Question.objects.create(survey=survey, title='q1', question_type='free_text')
@@ -576,6 +576,98 @@ def test_submission_view_get_is_public(user_factory, api_client):
     assert response.status_code == status.HTTP_200_OK
     assert response.data['title'] == 'Survey'
     assert len(response.data['questions']) == 1
+
+@pytest.mark.django_db
+def test_submission_view_post_allows_anonymous_submission_for_public_surveys(api_client, user_factory, survey, question, ft_question, choices):
+    owner = user_factory('owner')
+    survey.user = owner
+    survey.save()
+
+    payload = {
+        'answers': [
+            {'question': question.id, 'chosen_choice': choices.first().id},
+            {'question': ft_question.id, 'text_answer': 'hello'}
+        ]
+    }
+    url = reverse('survey:response', kwargs={'slug': survey.slug})
+    response = api_client.post(url, payload, 'json')
+
+    assert response.status_code == status.HTTP_201_CREATED
+
+@pytest.mark.django_db
+def test_submission_view_post_allows_authenticated_submission_for_public_surveys(api_client, user_factory, survey, question, ft_question, choices):
+    owner = user_factory('owner')
+    survey.user = owner
+    survey.save()
+    submitter = user_factory('submitter')
+    api_client.force_authenticate(submitter)
+    payload = {
+        'answers': [
+            {'question': question.id, 'chosen_choice': choices.first().id},
+            {'question': ft_question.id, 'text_answer': 'hello'}
+        ]
+    }
+    url = reverse('survey:response', kwargs={'slug': survey.slug})
+    response = api_client.post(url, payload, 'json')
+
+    assert response.status_code == status.HTTP_201_CREATED
+    submission = Submission.objects.filter(survey=survey).first()
+    assert submission.user_id == submitter.id
+
+@pytest.mark.django_db
+def test_submission_view_rejects_unautherized_get_for_private_survey(survey, question, api_client):
+    survey.is_public = False
+    survey.save()
+    url = reverse('survey:response', kwargs={'slug': survey.slug})
+    response = api_client.get(url)
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+@pytest.mark.django_db
+def test_submission_view_rejects_unautherized_post_for_private_survey(survey, question, api_client):
+    survey.is_public = False
+    survey.save()
+    url = reverse('survey:response', kwargs={'slug': survey.slug})
+    response = api_client.post(url, data={})
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+@pytest.mark.django_db
+def test_submission_view_accepts_autherized_get_for_private_survey(survey, question, api_client, user_factory):
+    survey.is_public = False
+    survey.save()
+    user = user_factory('user')
+
+    api_client.force_authenticate(user)
+    url = reverse('survey:response', kwargs={'slug': survey.slug})
+    response = api_client.get(url)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data['title'] == survey.title
+    assert response.data['questions'][0]['title'] == question.title
+
+@pytest.mark.django_db
+def test_submission_view_accepts_autherized_post_for_private_survey(survey, question, ft_question, choices, api_client, user_factory):
+    owner = user_factory('owner')
+    survey.user = owner
+    survey.is_public = False
+    survey.save()
+    submitter = user_factory('submitter')
+    api_client.force_authenticate(submitter)
+    payload = {
+        'answers': [
+            {'question': question.id, 'chosen_choice': choices.first().id},
+            {'question': ft_question.id, 'text_answer': 'hello'}
+        ]
+    }
+    url = reverse('survey:response', kwargs={'slug': survey.slug})
+    response = api_client.post(url, payload, 'json')
+
+    assert response.status_code == status.HTTP_201_CREATED
+    submission = Submission.objects.filter(survey=survey).first()
+    assert submission.user_id == submitter.id
+
+#? ---------------------- GET ------------------------
 
 @pytest.mark.django_db
 def test_submission_view_shows_choices_for_multiple_choice_questions_only(user_factory, api_client, survey, question, ft_question, choices):
@@ -608,44 +700,32 @@ def test_submission_view_returns_404_for_unknown_slug(user_factory, api_client, 
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
+@pytest.mark.django_db
+def test_submission_view_allows_get_for_inactive_surveys(survey, question, user_factory, api_client):
+    survey.is_active = False
+    survey.save()
+
+    url = reverse('survey:response', kwargs={'slug': survey.slug})
+    response = api_client.get(url)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data['title'] == survey.title
+    assert len(response.data['questions']) == 1
+    assert response.data['is_active'] == False
+    assert response.data['is_public'] == True
+
+@pytest.mark.django_db
+def test_submission_view_rejects_post_for_inactive_surveys(survey, question, user_factory, api_client):
+    survey.is_active = False
+    survey.save()
+
+    url = reverse('survey:response', kwargs={'slug': survey.slug})
+    response = api_client.post(url, {}, 'json')
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert response.data['detail'] == 'This survey is closed and no longer accepting responses.'
+
 #? ---------------------- POST ------------------------
-
-@pytest.mark.django_db
-def test_submission_view_post_allows_anonymous_submission(api_client, user_factory, survey, question, ft_question, choices):
-    owner = user_factory('owner')
-    survey.user = owner
-    survey.save()
-
-    payload = {
-        'answers': [
-            {'question': question.id, 'chosen_choice': choices.first().id},
-            {'question': ft_question.id, 'text_answer': 'hello'}
-        ]
-    }
-    url = reverse('survey:response', kwargs={'slug': survey.slug})
-    response = api_client.post(url, payload, 'json')
-
-    assert response.status_code == status.HTTP_201_CREATED
-
-@pytest.mark.django_db
-def test_submission_view_post_allows_authenticated_submission(api_client, user_factory, survey, question, ft_question, choices):
-    owner = user_factory('owner')
-    survey.user = owner
-    survey.save()
-    submitter = user_factory('submitter')
-    api_client.force_authenticate(submitter)
-    payload = {
-        'answers': [
-            {'question': question.id, 'chosen_choice': choices.first().id},
-            {'question': ft_question.id, 'text_answer': 'hello'}
-        ]
-    }
-    url = reverse('survey:response', kwargs={'slug': survey.slug})
-    response = api_client.post(url, payload, 'json')
-
-    assert response.status_code == status.HTTP_201_CREATED
-    submission = Submission.objects.filter(survey=survey).first()
-    assert submission.user_id == submitter.id
 
 @pytest.mark.django_db
 def test_submission_view_post_rejects_unanswered_required_question(api_client, user_factory, survey, question, ft_question, choices):
@@ -851,7 +931,7 @@ def test_results_view_shows_the_whole_data_appropriately(api_client, user_factor
 
 
 #! ================================================================
-#!                      SummarizeAnswers
+#!                       PublicListView
 #! ================================================================
 
 @pytest.mark.django_db
@@ -861,11 +941,35 @@ def test_public_view_shows_only_public_surveys(api_client, survey):
     survey4 = Survey.objects.create(title='meow3')
     survey5 = Survey.objects.create(title='meow4', is_active=False, is_public=False)
 
-
     url = reverse('survey:public-list')
     response = api_client.get(url)
 
     assert len(response.data) == 2
+
+@pytest.mark.django_db
+def test_public_view_shows_six_latest_public_surveys(api_client):
+    for i in range(1, 11):
+        Survey.objects.create(title=f's{i}')
+    private = Survey.objects.create(title='ss', is_public=False)
+    inactive = Survey.objects.create(title='ss', is_active=False)
+
+
+    url = reverse('survey:public-list')
+    response = api_client.get(url)
+
+    assert len(response.data) == 6
+    assert 'user' in response.data[0]
+    assert 'response_url' in response.data[0]
+    assert 'url' not in response.data[0]
+
+    titles = []
+    for t in response.data:
+        titles.append(t['title'])
+    assert private.title not in titles
+    assert inactive.title not in titles
+    assert titles == ['s10', 's9', 's8', 's7', 's6', 's5']    
+
+
 
 
 

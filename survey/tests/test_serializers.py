@@ -304,6 +304,36 @@ def test_create_serializer_creates_survey_with_nested_questions_and_choices(user
     assert survey.questions.get(title='q1').choices.count() == 2
 
 @pytest.mark.django_db
+def test_create_serializer_defaults_is_public_and_is_active_true_when_omitted(user_factory):
+    owner = user_factory('owner')
+    payload = {
+        'title': 'Survey',
+        'questions': [{'title': 'q1', 'question_type': 'free_text'}]
+    }
+    serializer = SurveyCreateSerializer(data=payload)
+    assert serializer.is_valid(), serializer.errors
+    survey = serializer.save(user=owner)
+
+    assert survey.is_public is True
+    assert survey.is_active is True
+
+@pytest.mark.django_db
+def test_create_serializer_accepts_explicit_is_public_and_is_active_false(user_factory):
+    owner = user_factory('owner')
+    payload = {
+        'title': 'Survey',
+        'is_public': False,
+        'is_active': False,
+        'questions': [{'title': 'q1', 'question_type': 'free_text'}]
+    }
+    serializer = SurveyCreateSerializer(data=payload)
+    assert serializer.is_valid(), serializer.errors
+    survey = serializer.save(user=owner)
+
+    assert survey.is_public is False
+    assert survey.is_active is False
+
+@pytest.mark.django_db
 def test_survey_create_serializer_ignores_incoming_id(user_factory, survey, question, ft_question, choices):
     owner = user_factory('owner')
     payload = {
@@ -694,6 +724,49 @@ def test_detail_serializer_shows_user_for_superuser(survey, question, api_rf, us
     response = SurveyDetailSerializer(survey, context={'request': request})
 
     assert 'user' in response.data
+
+@pytest.mark.django_db
+def test_detail_serializer_updates_is_public_and_is_active(survey, ft_question):
+    data = {
+        'title': survey.title,
+        'description': '',
+        'is_public': False,
+        'is_active': False,
+        'questions': [
+            {'id': ft_question.id, 'title': ft_question.title, 'question_type': 'free_text'}
+        ]
+    }
+    serializer = SurveyDetailSerializer(survey, data=data)
+    assert serializer.is_valid(), serializer.errors
+    updated = serializer.save()
+
+    assert updated.is_public is False
+    assert updated.is_active is False
+
+@pytest.mark.django_db
+def test_detail_serializer_updates_is_public_and_is_active_even_when_frozen(survey, ft_question, submission):
+    data = {
+        'title': 'new title',
+        'description': 'new des',
+        'is_public': False,
+        'is_active': False,
+        'questions': [
+            {'id': ft_question.id, 'title': 'attempted change', 'question_type': 'multiple_choice'}
+        ]
+    }
+    serializer = SurveyDetailSerializer(survey, data=data)
+    assert serializer.is_valid(), serializer.errors
+    assert serializer._frozen is True
+    updated = serializer.save()
+
+    assert updated.is_public is False
+    assert updated.is_active is False
+    ft_question.refresh_from_db()
+    survey.refresh_from_db()
+    assert survey.title == 'new title'
+    assert survey.description == 'new des'
+    assert ft_question.title == 'Explain yourself'
+    assert ft_question.question_type == 'free_text'
 
 #! ================================================================
 #!                  Representaion Serializers
