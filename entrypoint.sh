@@ -10,11 +10,16 @@ django.setup()
 from django.db import connections
 connections['default'].cursor()
 " > /dev/null 2>&1; do
-  sleep 1
+    sleep 1
 done
+
 echo "Database is ready."
 
 echo "Applying database migrations..."
 python manage.py migrate --noinput
 
+echo "Collecting static files..."
+python manage.py collectstatic --noinput
+
+echo "Starting application..."
 exec "$@"
