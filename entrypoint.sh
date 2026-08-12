@@ -18,6 +18,9 @@ echo "Database is ready."
 echo "Applying database migrations..."
 python manage.py migrate --noinput
 
+echo "Creating initial superuser if necessary..."
+python manage.py create_admin
+
 echo "Collecting static files..."
 python manage.py collectstatic --noinput
 

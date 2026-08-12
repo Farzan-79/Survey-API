@@ -2,7 +2,6 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView, TokenObtainPairView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
-from debug_toolbar.toolbar import debug_toolbar_urls
 from django.conf import settings
 
 
@@ -18,4 +17,6 @@ urlpatterns = [
 ]
 
 if settings.DEBUG:
+    from debug_toolbar.toolbar import debug_toolbar_urls
+
     urlpatterns += debug_toolbar_urls()
