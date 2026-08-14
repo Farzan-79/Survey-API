@@ -102,9 +102,17 @@ WSGI_APPLICATION = 'surveyapi.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': env.db('DATABASE_URL', default=f'sqlite:///{BASE_DIR / "db.sqlite3"}')
-}
+if DEBUG:
+    DATABASES = {
+        "default": env.db(
+            "DATABASE_URL",
+            default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        )
+    }
+else:
+    DATABASES = {
+        "default": env.db("DATABASE_URL")
+    }
 
 
 # Password validation
