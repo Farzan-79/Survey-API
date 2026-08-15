@@ -2,7 +2,7 @@ from django.shortcuts import render
 from rest_framework import generics, mixins, permissions, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from survey.permissions import IsOwnerOrSuperuser
+from survey.permissions import IsOwnerOrSuperuser, PrivateSurveyPermission
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.db.models import Prefetch, Count
@@ -115,12 +115,7 @@ class SurveyDetailView(generics.RetrieveUpdateDestroyAPIView):
 )
 class SubmissionView(APIView):
 
-    def get_permissions(self):
-        slug = self.kwargs['slug']
-        survey = get_object_or_404(Survey, slug=slug)
-        if not survey.is_public:
-            return [permissions.IsAuthenticated()]
-        return [permissions.AllowAny()]
+    permission_classes = [PrivateSurveyPermission]
 
     def get(self, request, slug):
         survey = get_object_or_404(Survey.objects \
