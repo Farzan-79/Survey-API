@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/33871238/README.md)
 # Survey-API
 
 A RESTful API for creating, managing, and collecting responses to surveys, built with **Django** and **Django REST Framework**, secured with **JWT authentication**.
